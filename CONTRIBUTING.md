@@ -64,10 +64,13 @@ git checkout -b feature/your-feature-name
 Before submitting:
 
 1. Run the full stack: `bash scripts/start.sh`
-2. Open [http://localhost:5173](http://localhost:5173) and verify the chat works
+2. Open [http://localhost:5173](http://localhost:5173) and verify the chat works end-to-end
 3. Test the health check: `curl http://localhost:8000/health`
-4. If you changed backend code, check `logs/backend.log` for errors
-5. If you changed the file upload feature, test with both a `.txt` and a `.pdf`
+4. Open the Memory Browser (🧠 Memory button) and verify Episodes and Concepts populate after a few messages
+5. In the Reflections tab, click **Run Consolidation Now** and verify it returns a result (needs 3+ episodes on one concept to create a reflection)
+6. If you changed backend code, check `logs/backend.log` for errors
+7. If you changed the file upload feature, test with both a `.txt` and a `.pdf`
+8. If you changed `graph_service.py`, verify the Neo4j schema still initialises cleanly on startup (look for "Neo4j schema ready" in the backend log)
 
 ### Submitting
 

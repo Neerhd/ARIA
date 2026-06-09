@@ -16,7 +16,7 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 |---|---|---|
 | Memory | Vector similarity search | Knowledge graph + vector search |
 | Learning | None — resets every session | Episodic → Semantic consolidation |
-| Model routing | One model for everything | 3-tier router (fast/capable/cloud) |
+| Model routing | One model for everything | 3-tier router (fast/capable/cloud) *(M5)* |
 | File access | Varies | Built-in — attach any file in chat |
 | Privacy | Depends on setup | 100% local by design |
 | Cost | Often subscription-based | Free after hardware |
@@ -26,35 +26,44 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   React Frontend                     │
-│          Chat UI · File Attachments · Status         │
-└───────────────────┬─────────────────────────────────┘
-                    │ REST (localhost:5173 → 8000)
-┌───────────────────▼─────────────────────────────────┐
-│                FastAPI Backend                       │
-│   /chat  ·  /files/upload  ·  /health               │
-└────┬──────────────┬──────────────┬──────────────────┘
-     │              │              │
-┌────▼────┐  ┌──────▼──────┐  ┌───▼──────────────────┐
-│ Ollama  │  │   SQLite    │  │  Memory Layer         │
-│ LLM     │  │ Conversations│  │  ChromaDB (vectors)  │
-│ :11434  │  │ & Messages  │  │  Neo4j (graph) :7687 │
-└─────────┘  └─────────────┘  └──────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                       React Frontend                          │
+│      Chat UI · File Attachments · Memory Browser · Status    │
+└─────────────────────────┬────────────────────────────────────┘
+                          │ REST  (localhost:5173 → 8000)
+┌─────────────────────────▼────────────────────────────────────┐
+│                     FastAPI Backend                           │
+│  /chat  ·  /files/upload  ·  /memory/*  ·  /consolidation/*  │
+└────┬────────────────┬───────────────────┬─────────────────────┘
+     │                │                   │
+┌────▼────┐    ┌──────▼──────┐    ┌───────▼─────────────────┐
+│ Ollama  │    │   SQLite    │    │      Memory Layer        │
+│ Chat    │    │ Conversations│   │  ChromaDB (semantic)     │
+│ Topics  │    │ Messages    │    │  Neo4j (knowledge graph) │
+│ Reflect │    │ Consol. log │    │  Episodes · Concepts     │
+│ :11434  │    │             │    │  Reflections  · :7687    │
+└─────────┘    └─────────────┘    └──────────────────────────┘
 ```
 
-### Memory system (primary innovation)
+### Memory system
 
-ARIA's memory is built on a knowledge graph, not flat vector storage. This means memories are connected to each other — not just retrieved by similarity score.
+ARIA's memory is built on a knowledge graph, not flat vector storage. Memories are connected to each other — not just retrieved by similarity score.
 
-| Node type | What it stores |
-|---|---|
-| **Episode** | Raw interaction: prompt, response, timestamp, tools used |
-| **Fact** | Atomic information extracted from episodes by the model |
-| **Reflection** | Higher-order pattern synthesised from clusters of episodes |
-| **Concept** | Topic node connecting related episodes, facts, and reflections |
+| Node type | What it stores | Status |
+|---|---|---|
+| **Episode** | Raw interaction: prompt, response, timestamp, recall count | ✅ Live |
+| **Concept** | Topic node linking related episodes; tracks episode frequency | ✅ Live |
+| **Reflection** | Higher-order pattern synthesised from clusters of 3+ episodes | ✅ Live |
+| **Fact** | Atomic information extracted from episodes by the model | Planned M6+ |
 
-Memory operations: **Write** → **Extract** → **Consolidate** → **Recall** → **Reinforce** → **Decay** *(Phase 2)*
+**Memory pipeline (currently active):**
+
+1. **Write** — Every assistant reply is stored as an Episode node in Neo4j (shared ID with ChromaDB and SQLite)
+2. **Extract** — Topic tags are extracted from each turn using the local model; Concept nodes are created or incremented
+3. **Link** — Episodes are connected to their Concepts (`DISCUSSES`) and to the previous episode in the conversation (`NEXT`)
+4. **Recall** — ChromaDB semantic search finds relevant past episodes before each response
+5. **Reinforce** — Recalled episodes have their `recall_count` incremented in Neo4j
+6. **Consolidate** — A nightly background job clusters episodes by Concept (min 3 episodes), prompts the model to synthesise a Reflection, and stores it with `SYNTHESISED_FROM` and `ABOUT` edges
 
 ---
 
@@ -64,12 +73,12 @@ Memory operations: **Write** → **Extract** → **Consolidate** → **Recall** 
 |---|---|---|---|
 | M1 | Infrastructure | Ollama, FastAPI, React UI, SQLite, Neo4j, ChromaDB | ✅ Complete |
 | M2 | Core Chat | Multi-turn chat, file attachments, session persistence | ✅ Complete |
-| M3 | Memory Layer v1 | Episodic memory capture in knowledge graph | ⬜ Planned |
-| M4 | Consolidation Pipeline | Background job extracts semantic memories | ⬜ Planned |
-| M5 | Model Router | 3-tier prompt classifier, routing logged | ⬜ Planned |
-| M6 | Tool System | File reader + SearXNG web search as agent tools | ⬜ Planned |
-| M7 | MVP Testing | End-to-end testing, memory pattern validation | ⬜ Planned |
-| M8 | MVP Complete | Stable system, ready for Phase 2 | ⬜ Planned |
+| M3 | Memory Layer v1 | Episodic memory capture, topic extraction, knowledge graph | ✅ Complete |
+| M4 | Consolidation Pipeline | Reflection synthesis, nightly scheduler, memory browser UI | ✅ Complete |
+| M5 | Model Router | 3-tier prompt classifier, routing logged | Planned |
+| M6 | Tool System | File reader + SearXNG web search as agent tools | Planned |
+| M7 | MVP Testing | End-to-end testing, memory pattern validation | Planned |
+| M8 | MVP Complete | Stable system, ready for Phase 2 | Planned |
 
 ---
 
@@ -145,48 +154,69 @@ bash scripts/stop.sh
 
 ```
 ARIA/
-├── .env.example            # Environment variable template
-├── .env                    # Your local config (never committed)
+├── .env.example                # Environment variable template
+├── .env                        # Your local config (never committed)
 ├── scripts/
-│   ├── install.sh          # One-time setup
-│   ├── start.sh            # Start all services
-│   └── stop.sh             # Stop all services
+│   ├── install.sh              # One-time setup
+│   ├── start.sh                # Start all services
+│   └── stop.sh                 # Stop all services
 ├── backend/
-│   ├── main.py             # FastAPI app entry point
-│   ├── config.py           # Settings loaded from .env
-│   ├── requirements.txt    # Python dependencies
+│   ├── main.py                 # FastAPI app + nightly consolidation scheduler
+│   ├── config.py               # Settings loaded from .env
+│   ├── requirements.txt        # Python dependencies
 │   ├── api/
-│   │   ├── chat.py         # Chat endpoints
-│   │   ├── files.py        # File upload endpoint
-│   │   └── health.py       # Health check
+│   │   ├── chat.py             # Chat endpoints + episodic memory pipeline
+│   │   ├── consolidation.py    # Consolidation trigger, run log, reflections
+│   │   ├── files.py            # File upload and text extraction
+│   │   ├── health.py           # Health check for all services
+│   │   └── memory.py           # Memory browser endpoints
 │   ├── database/
-│   │   ├── sqlite.py       # SQLAlchemy async setup
-│   │   ├── neo4j_client.py # Neo4j driver
-│   │   └── chroma_client.py# ChromaDB client
+│   │   ├── sqlite.py           # SQLAlchemy async engine and session
+│   │   ├── neo4j_client.py     # Neo4j async driver
+│   │   └── chroma_client.py    # ChromaDB persistent client
 │   ├── models/
-│   │   └── schemas.py      # Pydantic + SQLAlchemy models
+│   │   └── schemas.py          # ORM models (Conversation, Message, ConsolidationRun)
 │   └── services/
-│       ├── ollama_service.py   # Ollama API calls
-│       ├── memory_service.py   # ChromaDB memory operations
-│       └── file_service.py     # File text extraction
+│       ├── consolidation_service.py  # Reflection synthesis pipeline
+│       ├── file_service.py           # PDF and text extraction (PyMuPDF)
+│       ├── graph_service.py          # All Neo4j read/write operations
+│       ├── memory_service.py         # ChromaDB store and semantic search
+│       ├── ollama_service.py         # Ollama chat and health check
+│       └── topic_service.py          # Topic tag extraction from conversations
 ├── frontend/
-│   ├── vite.config.js      # Vite + PWA config
+│   ├── index.html              # Vite entry point
+│   ├── vite.config.js          # Vite + PWA config, /api proxy
 │   ├── package.json
 │   └── src/
-│       ├── App.jsx          # Root component
-│       ├── main.jsx         # Entry point
+│       ├── App.jsx             # Root component, memory panel toggle
+│       ├── main.jsx            # Entry point
 │       ├── components/
-│       │   ├── InputBar.jsx     # Chat input + file attach
-│       │   ├── MessageList.jsx  # Message thread
-│       │   ├── Sidebar.jsx      # Conversation list
-│       │   └── StatusBar.jsx    # Service health indicators
+│       │   ├── InputBar.jsx    # Chat input + file attachment
+│       │   ├── MemoryBrowser.jsx # Episodes, Concepts, Reflections panel
+│       │   ├── MessageList.jsx # Message thread with file badge
+│       │   ├── Sidebar.jsx     # Conversation list
+│       │   └── StatusBar.jsx   # Live service health dots
 │       └── services/
-│           └── api.js       # Backend API calls
-└── data/                   # Local databases (never committed)
+│           └── api.js          # All backend API calls
+└── data/                       # Local databases (never committed)
     ├── sqlite/
     ├── chroma/
     └── neo4j/
 ```
+
+---
+
+## Memory Browser
+
+Click **🧠 Memory** in the top-right corner to open the memory panel. It has three tabs:
+
+| Tab | What it shows |
+|---|---|
+| **Episodes** | Every conversation turn stored in Neo4j, with topic tags and recall count. Click a card to expand the full prompt and response. |
+| **Concepts** | All topic nodes extracted from conversations, sorted by frequency. Click a concept to filter the Episodes tab. |
+| **Reflections** | Higher-order patterns synthesised by the consolidation pipeline. Each card shows the concept, the synthesised insight, and how many episodes it was drawn from. Use the **Run Consolidation Now** button to trigger synthesis on demand. |
+
+Reflections are also generated automatically every 24 hours by the background scheduler.
 
 ---
 
@@ -212,7 +242,7 @@ All configuration lives in `.env`. Key values:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_MODEL` | `llama3.2:3b` | Model used for chat. Change to any model you've pulled with `ollama pull` |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Model used for chat, topic extraction, and reflection synthesis |
 | `NEO4J_PASSWORD` | — | Must match the password you set in the Neo4j browser |
 | `SQLITE_DB_PATH` | `./data/sqlite/aria.db` | Path to the conversation database |
 | `CHROMA_DB_PATH` | `./data/chroma` | Path to the vector memory store |
@@ -236,13 +266,41 @@ bash scripts/stop.sh && bash scripts/start.sh
 
 The backend exposes a REST API documented interactively at [http://localhost:8000/docs](http://localhost:8000/docs) when running.
 
+### Chat
+
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Service status for all components |
 | `POST` | `/chat` | Send a message (with optional file content) |
 | `GET` | `/chat/conversations` | List all conversations |
 | `GET` | `/chat/conversations/{id}/messages` | Get messages in a conversation |
-| `POST` | `/files/upload` | Upload and extract text from a file |
+
+### Files
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/files/upload` | Upload a file and extract its text content |
+
+### Memory
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/memory/episodes` | Recent episodes with topics (`?limit=`) |
+| `GET` | `/memory/concepts` | Top concepts by episode count (`?limit=`) |
+| `GET` | `/memory/stats` | Count of episodes, concepts, and reflections |
+
+### Consolidation
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/consolidation/run` | Manually trigger the consolidation pipeline |
+| `GET` | `/consolidation/runs` | List past consolidation run logs (`?limit=`) |
+| `GET` | `/consolidation/reflections` | List all synthesised Reflection nodes (`?limit=`) |
+
+### Health
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Service status for all components |
 
 ---
 
