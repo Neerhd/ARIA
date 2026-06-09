@@ -49,3 +49,21 @@ export async function checkHealth() {
   if (!res.ok) return null;
   return res.json();
 }
+
+export async function fetchMemoryEpisodes(limit = 20) {
+  const res = await fetch(`${BASE}/memory/episodes?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchMemoryConcepts(limit = 40) {
+  const res = await fetch(`${BASE}/memory/concepts?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchMemoryStats() {
+  const res = await fetch(`${BASE}/memory/stats`);
+  if (!res.ok) return {};
+  return res.json();
+}

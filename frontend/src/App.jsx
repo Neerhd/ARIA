@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
 import MessageList from "./components/MessageList";
 import InputBar from "./components/InputBar";
+import MemoryBrowser from "./components/MemoryBrowser";
 import { sendMessage, fetchMessages, uploadFile } from "./services/api";
 
 export default function App() {
@@ -10,6 +11,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const loadConversation = async (id) => {
     setConversationId(id);
@@ -96,11 +98,22 @@ export default function App() {
         <span style={{ color: "#4a5568", fontSize: 12, marginLeft: 4 }}>
           Adaptive Reasoning Intelligence Assistant
         </span>
+        <button
+          onClick={() => setMemoryOpen((v) => !v)}
+          style={{
+            marginLeft: "auto", padding: "6px 14px", background: memoryOpen ? "#7c3aed22" : "none",
+            border: `1px solid ${memoryOpen ? "#7c3aed" : "#2a2a3a"}`,
+            borderRadius: 8, cursor: "pointer", fontSize: 13,
+            color: memoryOpen ? "#a78bfa" : "#6b7280",
+          }}
+        >
+          🧠 Memory
+        </button>
       </header>
 
       <StatusBar />
 
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
         <Sidebar activeId={conversationId} onSelect={loadConversation} onNew={handleNewChat} />
 
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -115,6 +128,8 @@ export default function App() {
           )}
           <InputBar onSend={handleSend} disabled={loading} />
         </main>
+
+        {memoryOpen && <MemoryBrowser onClose={() => setMemoryOpen(false)} />}
       </div>
     </div>
   );

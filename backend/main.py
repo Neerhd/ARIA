@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database.sqlite import init_db
 from database.neo4j_client import close_neo4j_driver
+from services.graph_service import init_graph_schema
 from api.health import router as health_router
 from api.chat import router as chat_router
 from api.files import router as files_router
+from api.memory import router as memory_router
 import logging
 
 logging.basicConfig(
@@ -20,6 +22,7 @@ async def lifespan(app: FastAPI):
     logger.info("ARIA backend starting up...")
     await init_db()
     logger.info("SQLite database initialized.")
+    await init_graph_schema()
     yield
     logger.info("ARIA backend shutting down...")
     await close_neo4j_driver()
@@ -43,6 +46,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(files_router)
+app.include_router(memory_router)
 
 
 @app.get("/")

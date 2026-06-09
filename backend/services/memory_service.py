@@ -6,20 +6,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def store_memory(text: str, metadata: dict) -> str:
-    """Persist a piece of text into the vector store. Returns the entry ID."""
+def store_memory(text: str, metadata: dict, entry_id: str | None = None) -> str:
+    """Persist a piece of text into the vector store. Returns the entry ID.
+
+    Pass entry_id to match the Neo4j Episode id so the two stores stay in sync.
+    """
     collection = get_or_create_collection()
-    entry_id = str(uuid.uuid4())
+    eid = entry_id or str(uuid.uuid4())
     collection.add(
         documents=[text],
         metadatas=[metadata],
-        ids=[entry_id],
+        ids=[eid],
     )
-    return entry_id
+    return eid
 
 
 def search_memory(query: str, n_results: int = 5) -> list[dict]:
-    """Return the top-n semantically similar memory entries for a query."""
+    """Return the top-n semantically similar memory entries for a query.
+
+    Each result includes an 'id' field so callers can reinforce the
+    matching Neo4j Episode nodes.
+    """
     collection = get_or_create_collection()
     try:
         results = collection.query(
@@ -28,12 +35,13 @@ def search_memory(query: str, n_results: int = 5) -> list[dict]:
             include=["documents", "metadatas", "distances"],
         )
         items = []
-        for doc, meta, dist in zip(
+        for eid, doc, meta, dist in zip(
+            results["ids"][0],
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
         ):
-            items.append({"text": doc, "metadata": meta, "distance": dist})
+            items.append({"id": eid, "text": doc, "metadata": meta, "distance": dist})
         return items
     except Exception as e:
         logger.warning(f"Memory search failed: {e}")
