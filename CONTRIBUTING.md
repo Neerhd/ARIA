@@ -68,9 +68,13 @@ Before submitting:
 3. Test the health check: `curl http://localhost:8000/health`
 4. Open the Memory Browser (🧠 Memory button) and verify Episodes and Concepts populate after a few messages
 5. In the Reflections tab, click **Run Consolidation Now** and verify it returns a result (needs 3+ episodes on one concept to create a reflection)
-6. If you changed backend code, check `logs/backend.log` for errors
-7. If you changed the file upload feature, test with both a `.txt` and a `.pdf`
-8. If you changed `graph_service.py`, verify the Neo4j schema still initialises cleanly on startup (look for "Neo4j schema ready" in the backend log)
+6. Test the model router: `curl http://localhost:8000/router/config` and verify T1/T2 show as `ready`
+7. Test Auto mode — attach a file and confirm the response shows a T2 badge
+8. Test Ask mode — attach a file and confirm a permission card appears before the model responds
+9. If you changed backend code, check `logs/backend.log` for errors
+10. If you changed the file upload feature, test with both a `.txt` and a `.pdf`
+11. If you changed `graph_service.py`, verify the Neo4j schema still initialises cleanly on startup (look for "Neo4j schema ready" in the backend log)
+12. If you changed `router_service.py` or `api/router.py`, confirm routing decisions appear in the `routing_logs` SQLite table
 
 ### Submitting
 

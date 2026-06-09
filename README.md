@@ -16,7 +16,7 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 |---|---|---|
 | Memory | Vector similarity search | Knowledge graph + vector search |
 | Learning | None — resets every session | Episodic → Semantic consolidation |
-| Model routing | One model for everything | 3-tier router (fast/capable/cloud) *(M5)* |
+| Model routing | One model for everything | 3-tier router (fast/capable/cloud) |
 | File access | Varies | Built-in — attach any file in chat |
 | Privacy | Depends on setup | 100% local by design |
 | Cost | Often subscription-based | Free after hardware |
@@ -28,20 +28,22 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                       React Frontend                          │
-│      Chat UI · File Attachments · Memory Browser · Status    │
+│  Chat UI · File Attachments · Memory Browser · Settings      │
 └─────────────────────────┬────────────────────────────────────┘
                           │ REST  (localhost:5173 → 8000)
 ┌─────────────────────────▼────────────────────────────────────┐
 │                     FastAPI Backend                           │
-│  /chat  ·  /files/upload  ·  /memory/*  ·  /consolidation/*  │
+│  /chat · /files/upload · /memory/* · /consolidation/*        │
+│  /router/*                                                    │
 └────┬────────────────┬───────────────────┬─────────────────────┘
      │                │                   │
 ┌────▼────┐    ┌──────▼──────┐    ┌───────▼─────────────────┐
 │ Ollama  │    │   SQLite    │    │      Memory Layer        │
-│ Chat    │    │ Conversations│   │  ChromaDB (semantic)     │
-│ Topics  │    │ Messages    │    │  Neo4j (knowledge graph) │
-│ Reflect │    │ Consol. log │    │  Episodes · Concepts     │
-│ :11434  │    │             │    │  Reflections  · :7687    │
+│ T1/T2   │    │ Conversations│   │  ChromaDB (semantic)     │
+│ Chat    │    │ Messages    │    │  Neo4j (knowledge graph) │
+│ Topics  │    │ Consol. log │    │  Episodes · Concepts     │
+│ Reflect │    │ Routing log │    │  Reflections  · :7687    │
+│ :11434  │    │             │    │                          │
 └─────────┘    └─────────────┘    └──────────────────────────┘
 ```
 
@@ -75,7 +77,7 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 | M2 | Core Chat | Multi-turn chat, file attachments, session persistence | ✅ Complete |
 | M3 | Memory Layer v1 | Episodic memory capture, topic extraction, knowledge graph | ✅ Complete |
 | M4 | Consolidation Pipeline | Reflection synthesis, nightly scheduler, memory browser UI | ✅ Complete |
-| M5 | Model Router | 3-tier prompt classifier, routing logged | Planned |
+| M5 | Model Router | 3-tier action-based router, three modes, tier badges, routing logged | ✅ Complete |
 | M6 | Tool System | File reader + SearXNG web search as agent tools | Planned |
 | M7 | MVP Testing | End-to-end testing, memory pattern validation | Planned |
 | M8 | MVP Complete | Stable system, ready for Phase 2 | Planned |
@@ -165,37 +167,42 @@ ARIA/
 │   ├── config.py               # Settings loaded from .env
 │   ├── requirements.txt        # Python dependencies
 │   ├── api/
-│   │   ├── chat.py             # Chat endpoints + episodic memory pipeline
+│   │   ├── chat.py             # Chat endpoints + episodic memory + routing pipeline
 │   │   ├── consolidation.py    # Consolidation trigger, run log, reflections
 │   │   ├── files.py            # File upload and text extraction
 │   │   ├── health.py           # Health check for all services
-│   │   └── memory.py           # Memory browser endpoints
+│   │   ├── memory.py           # Memory browser endpoints
+│   │   └── router.py           # Router config and routing log endpoints
 │   ├── database/
 │   │   ├── sqlite.py           # SQLAlchemy async engine and session
 │   │   ├── neo4j_client.py     # Neo4j async driver
 │   │   └── chroma_client.py    # ChromaDB persistent client
 │   ├── models/
-│   │   └── schemas.py          # ORM models (Conversation, Message, ConsolidationRun)
+│   │   └── schemas.py          # ORM models (Conversation, Message, ConsolidationRun, RoutingLog)
 │   └── services/
 │       ├── consolidation_service.py  # Reflection synthesis pipeline
 │       ├── file_service.py           # PDF and text extraction (PyMuPDF)
 │       ├── graph_service.py          # All Neo4j read/write operations
 │       ├── memory_service.py         # ChromaDB store and semantic search
 │       ├── ollama_service.py         # Ollama chat and health check
+│       ├── router_service.py         # Tier classification, model dispatch
 │       └── topic_service.py          # Topic tag extraction from conversations
 ├── frontend/
 │   ├── index.html              # Vite entry point
 │   ├── vite.config.js          # Vite + PWA config, /api proxy
 │   ├── package.json
 │   └── src/
-│       ├── App.jsx             # Root component, memory panel toggle
+│       ├── App.jsx             # Root component, routing state, settings toggle
 │       ├── main.jsx            # Entry point
 │       ├── components/
-│       │   ├── InputBar.jsx    # Chat input + file attachment
-│       │   ├── MemoryBrowser.jsx # Episodes, Concepts, Reflections panel
-│       │   ├── MessageList.jsx # Message thread with file badge
-│       │   ├── Sidebar.jsx     # Conversation list
-│       │   └── StatusBar.jsx   # Live service health dots
+│       │   ├── InputBar.jsx        # Chat input, file attachment, tier selector
+│       │   ├── MemoryBrowser.jsx   # Episodes, Concepts, Reflections panel
+│       │   ├── MessageList.jsx     # Message thread, tier badges, routing prompts
+│       │   ├── ModelBadge.jsx      # T1/T2/T3 badge on every assistant message
+│       │   ├── RoutingPrompt.jsx   # Ask-mode permission card in chat thread
+│       │   ├── RouterSettings.jsx  # Settings overlay — mode selector and tier info
+│       │   ├── Sidebar.jsx         # Conversation list
+│       │   └── StatusBar.jsx       # Live service health dots
 │       └── services/
 │           └── api.js          # All backend API calls
 └── data/                       # Local databases (never committed)
@@ -220,6 +227,30 @@ Reflections are also generated automatically every 24 hours by the background sc
 
 ---
 
+## Model Router
+
+ARIA has a three-tier model system. The router automatically picks the right model based on what you are doing, and every response shows a coloured badge (T1/T2/T3) so you always know which model answered.
+
+| Tier | Default model | When it runs |
+|---|---|---|
+| **T1** | `llama3.2:3b` (local, ~2 GB) | Default — fast responses for casual chat and simple questions |
+| **T2** | `qwen2.5:14b` (local, ~9 GB) | File attached, or conversation exceeds 15 messages |
+| **T3** | `gemini-2.0-flash` (cloud) | Manual only — requires `TIER3_API_KEY` in `.env` |
+
+### Routing modes
+
+Click **⚙ Settings** in the top-right corner to choose how the router behaves:
+
+| Mode | Behaviour |
+|---|---|
+| **Auto** *(default)* | System upgrades silently when it detects a heavier task. You see which tier responded via the badge. |
+| **Ask** | System detects when an upgrade is warranted and shows a permission card in the chat before switching. You approve or decline. |
+| **Manual** | T1/T2/T3 selector appears in the input bar. You set the tier for the whole conversation. |
+
+Every routing decision is logged to the `routing_logs` SQLite table with the mode, classified tier, actual tier, model used, and the signals that triggered the classification.
+
+---
+
 ## Supported file types
 
 You can attach files directly in the chat interface. ARIA will read the content and answer questions about it.
@@ -240,25 +271,25 @@ Files larger than 20 MB are rejected. Files whose text exceeds 16,000 characters
 
 All configuration lives in `.env`. Key values:
 
+**Core**
+
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_MODEL` | `llama3.2:3b` | Model used for chat, topic extraction, and reflection synthesis |
 | `NEO4J_PASSWORD` | — | Must match the password you set in the Neo4j browser |
 | `SQLITE_DB_PATH` | `./data/sqlite/aria.db` | Path to the conversation database |
 | `CHROMA_DB_PATH` | `./data/chroma` | Path to the vector memory store |
 
-### Changing the AI model
+**Model tiers**
 
-```bash
-# Pull a larger model (better quality, slower)
-ollama pull llama3.1:8b
+| Variable | Default | Description |
+|---|---|---|
+| `TIER1_MODEL` | `llama3.2:3b` | Fast local model — casual chat, quick questions |
+| `TIER2_MODEL` | `qwen2.5:14b` | Capable local model — file analysis, long conversations |
+| `TIER3_MODEL` | `gemini-2.0-flash` | Cloud model model name (optional) |
+| `TIER3_API_KEY` | *(empty)* | API key for Tier 3. Leave empty to disable cloud. For Gemini, get a free key at [aistudio.google.com](https://aistudio.google.com) |
+| `TIER3_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | OpenAI-compatible base URL for Tier 3 provider |
 
-# Then update .env
-OLLAMA_MODEL=llama3.1:8b
-
-# Restart the backend
-bash scripts/stop.sh && bash scripts/start.sh
-```
+Tier 3 is disabled by default. ARIA works fully offline with just Tier 1 and Tier 2.
 
 ---
 
@@ -295,6 +326,13 @@ The backend exposes a REST API documented interactively at [http://localhost:800
 | `POST` | `/consolidation/run` | Manually trigger the consolidation pipeline |
 | `GET` | `/consolidation/runs` | List past consolidation run logs (`?limit=`) |
 | `GET` | `/consolidation/reflections` | List all synthesised Reflection nodes (`?limit=`) |
+
+### Router
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/router/config` | Tier models, types, availability status, and descriptions |
+| `GET` | `/router/logs` | Recent routing decisions with signals (`?limit=`) |
 
 ### Health
 
