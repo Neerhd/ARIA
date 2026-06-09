@@ -74,6 +74,19 @@ class MessageOut(BaseModel):
         from_attributes = True
 
 
+class ConsolidationRun(Base):
+    __tablename__ = "consolidation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    clusters_found: Mapped[int] = mapped_column(Integer, default=0)
+    reflections_created: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class HealthResponse(BaseModel):
     status: str
     ollama: bool

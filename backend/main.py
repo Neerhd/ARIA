@@ -8,6 +8,8 @@ from api.health import router as health_router
 from api.chat import router as chat_router
 from api.files import router as files_router
 from api.memory import router as memory_router
+from api.consolidation import router as consolidation_router, run_consolidation_with_log
+import asyncio
 import logging
 
 logging.basicConfig(
@@ -16,6 +18,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_CONSOLIDATION_INTERVAL = 24 * 60 * 60  # 24 hours
+
+
+async def _nightly_consolidation():
+    """Background task: runs the consolidation pipeline once per day."""
+    while True:
+        await asyncio.sleep(_CONSOLIDATION_INTERVAL)
+        logger.info("Scheduler: starting nightly consolidation…")
+        try:
+            result = await run_consolidation_with_log(triggered_by="scheduler")
+            logger.info(
+                f"Scheduler: consolidation complete — "
+                f"{result['reflections_created']} reflection(s) from "
+                f"{result['clusters_found']} cluster(s)."
+            )
+        except Exception as e:
+            logger.error(f"Scheduler: consolidation failed: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,8 +43,10 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("SQLite database initialized.")
     await init_graph_schema()
+    scheduler = asyncio.create_task(_nightly_consolidation())
     yield
     logger.info("ARIA backend shutting down...")
+    scheduler.cancel()
     await close_neo4j_driver()
 
 
@@ -47,6 +69,7 @@ app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(files_router)
 app.include_router(memory_router)
+app.include_router(consolidation_router)
 
 
 @app.get("/")

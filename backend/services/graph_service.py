@@ -22,6 +22,10 @@ async def init_graph_schema():
                 "FOR (c:Concept) REQUIRE c.name IS UNIQUE"
             )
             await s.run(
+                "CREATE CONSTRAINT reflection_id IF NOT EXISTS "
+                "FOR (r:Reflection) REQUIRE r.id IS UNIQUE"
+            )
+            await s.run(
                 "CREATE INDEX episode_convo IF NOT EXISTS "
                 "FOR (e:Episode) ON (e.conversation_id)"
             )
@@ -215,11 +219,117 @@ async def get_graph_stats() -> dict:
                 """
                 MATCH (e:Episode) WITH count(e) AS episodes
                 MATCH (c:Concept) WITH episodes, count(c) AS concepts
-                RETURN episodes, concepts
+                OPTIONAL MATCH (r:Reflection) WITH episodes, concepts, count(r) AS reflections
+                RETURN episodes, concepts, reflections
                 """
             )
             row = await result.single()
-            return {"episodes": row["episodes"], "concepts": row["concepts"]} if row else {}
+            return (
+                {"episodes": row["episodes"], "concepts": row["concepts"], "reflections": row["reflections"]}
+                if row else {}
+            )
     except Exception as e:
         logger.warning(f"get_graph_stats failed: {e}")
-        return {"episodes": 0, "concepts": 0}
+        return {"episodes": 0, "concepts": 0, "reflections": 0}
+
+
+# ─── Consolidation pipeline ────────────────────────────────────────────────────
+
+async def get_clusters_for_consolidation(min_episodes: int = 3) -> list[dict]:
+    """Return concepts whose unconsolidated episodes meet the minimum threshold."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (c:Concept)<-[:DISCUSSES]-(e:Episode)
+                WHERE NOT EXISTS {
+                    MATCH (r:Reflection)-[:SYNTHESISED_FROM]->(e)
+                }
+                WITH c.name AS concept, collect({
+                    id: e.id,
+                    prompt: e.prompt,
+                    response: e.response,
+                    timestamp: e.timestamp
+                }) AS episodes
+                WHERE size(episodes) >= $min_episodes
+                RETURN concept, episodes
+                ORDER BY size(episodes) DESC
+                LIMIT 20
+                """,
+                min_episodes=min_episodes,
+            )
+            return [dict(r) for r in await result.data()]
+    except Exception as e:
+        logger.warning(f"get_clusters_for_consolidation failed: {e}")
+        return []
+
+
+async def store_reflection(
+    reflection_id: str,
+    concept: str,
+    text: str,
+    episode_ids: list[str],
+) -> bool:
+    """Create a Reflection node and link it to source episodes and its Concept."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            await s.run(
+                """
+                CREATE (r:Reflection {
+                    id: $id,
+                    concept: $concept,
+                    text: $text,
+                    created_at: $created_at,
+                    episode_count: $episode_count
+                })
+                """,
+                id=reflection_id,
+                concept=concept,
+                text=text,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                episode_count=len(episode_ids),
+            )
+            await s.run(
+                """
+                MATCH (r:Reflection {id: $rid}), (e:Episode)
+                WHERE e.id IN $episode_ids
+                MERGE (r)-[:SYNTHESISED_FROM]->(e)
+                """,
+                rid=reflection_id,
+                episode_ids=episode_ids,
+            )
+            await s.run(
+                """
+                MATCH (r:Reflection {id: $rid}), (c:Concept {name: $concept})
+                MERGE (r)-[:ABOUT]->(c)
+                """,
+                rid=reflection_id,
+                concept=concept,
+            )
+        return True
+    except Exception as e:
+        logger.warning(f"store_reflection failed: {e}")
+        return False
+
+
+async def get_reflections(limit: int = 20) -> list[dict]:
+    """Return synthesised reflection nodes for the memory browser."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (r:Reflection)
+                RETURN r.id AS id, r.concept AS concept, r.text AS text,
+                       r.created_at AS created_at, r.episode_count AS episode_count
+                ORDER BY r.created_at DESC
+                LIMIT $limit
+                """,
+                limit=limit,
+            )
+            return [dict(r) for r in await result.data()]
+    except Exception as e:
+        logger.warning(f"get_reflections failed: {e}")
+        return []

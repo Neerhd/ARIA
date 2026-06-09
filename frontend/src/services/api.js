@@ -67,3 +67,24 @@ export async function fetchMemoryStats() {
   if (!res.ok) return {};
   return res.json();
 }
+
+export async function fetchReflections(limit = 20) {
+  const res = await fetch(`${BASE}/consolidation/reflections?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchConsolidationRuns(limit = 5) {
+  const res = await fetch(`${BASE}/consolidation/runs?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function triggerConsolidation() {
+  const res = await fetch(`${BASE}/consolidation/run`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}

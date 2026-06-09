@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
-import { fetchMemoryEpisodes, fetchMemoryConcepts, fetchMemoryStats } from "../services/api";
+import { useEffect, useState, useCallback } from "react";
+import {
+  fetchMemoryEpisodes, fetchMemoryConcepts, fetchMemoryStats,
+  fetchReflections, triggerConsolidation,
+} from "../services/api";
 
 function timeAgo(isoString) {
   if (!isoString) return "";
@@ -78,39 +81,95 @@ function EpisodeCard({ episode }) {
   );
 }
 
+function ReflectionCard({ reflection }) {
+  return (
+    <div style={{
+      background: "#1a1a24", border: "1px solid #3b2a6a", borderRadius: 10,
+      padding: "14px 16px",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+        <span style={{
+          background: "#7c3aed33", color: "#c4b5fd", borderRadius: 10,
+          padding: "3px 10px", fontSize: 12, fontWeight: 600,
+        }}>
+          {reflection.concept}
+        </span>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: "#4a5568" }}>
+          <span title="Source episodes">{reflection.episode_count} ep</span>
+          <span>{timeAgo(reflection.created_at)}</span>
+        </div>
+      </div>
+      <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>
+        {reflection.text}
+      </p>
+    </div>
+  );
+}
+
 export default function MemoryBrowser({ onClose }) {
   const [tab, setTab] = useState("episodes");
   const [episodes, setEpisodes] = useState([]);
   const [concepts, setConcepts] = useState([]);
   const [stats, setStats] = useState(null);
+  const [reflections, setReflections] = useState([]);
   const [activeConcept, setActiveConcept] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState(null);
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     setLoading(true);
     Promise.all([
       fetchMemoryEpisodes(30),
       fetchMemoryConcepts(50),
       fetchMemoryStats(),
-    ]).then(([eps, cons, st]) => {
+      fetchReflections(20),
+    ]).then(([eps, cons, st, refs]) => {
       setEpisodes(eps);
       setConcepts(cons);
       setStats(st);
+      setReflections(refs);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleConceptClick = (name) => {
     setActiveConcept((prev) => (prev === name ? null : name));
     if (tab !== "episodes") setTab("episodes");
   };
 
+  const handleRunConsolidation = async () => {
+    setRunning(true);
+    setRunResult(null);
+    try {
+      const result = await triggerConsolidation();
+      setRunResult({
+        ok: true,
+        message: result.reflections_created > 0
+          ? `Created ${result.reflections_created} reflection(s) from ${result.clusters_found} cluster(s).`
+          : result.clusters_found === 0
+            ? "Not enough data yet — need 3+ episodes per concept."
+            : `Found ${result.clusters_found} cluster(s) but model returned no usable reflections.`,
+      });
+      await fetchReflections(20).then(setReflections);
+      await fetchMemoryStats().then(setStats);
+    } catch (e) {
+      setRunResult({ ok: false, message: e.message });
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const visibleEpisodes = activeConcept
     ? episodes.filter((e) => (e.topics || []).includes(activeConcept))
     : episodes;
 
+  const tabs = ["episodes", "concepts", "reflections"];
+
   return (
     <div style={{
-      position: "absolute", top: 0, right: 0, bottom: 0, width: 400,
+      position: "absolute", top: 0, right: 0, bottom: 0, width: 420,
       background: "#13131e", borderLeft: "1px solid #2a2a3a",
       display: "flex", flexDirection: "column", zIndex: 100,
     }}>
@@ -123,7 +182,7 @@ export default function MemoryBrowser({ onClose }) {
           <div style={{ fontWeight: 700, fontSize: 15 }}>🧠 Memory</div>
           {stats && (
             <div style={{ fontSize: 11, color: "#4a5568", marginTop: 2 }}>
-              {stats.episodes ?? 0} episodes · {stats.concepts ?? 0} concepts
+              {stats.episodes ?? 0} episodes · {stats.concepts ?? 0} concepts · {stats.reflections ?? 0} reflections
             </div>
           )}
         </div>
@@ -137,10 +196,10 @@ export default function MemoryBrowser({ onClose }) {
 
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: "1px solid #2a2a3a" }}>
-        {["episodes", "concepts"].map((t) => (
+        {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             flex: 1, padding: "10px", background: "none", border: "none",
-            cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
+            cursor: "pointer", fontSize: 12, fontWeight: tab === t ? 600 : 400,
             color: tab === t ? "#e2e8f0" : "#6b7280",
             borderBottom: tab === t ? "2px solid #7c3aed" : "2px solid transparent",
           }}>
@@ -157,6 +216,7 @@ export default function MemoryBrowser({ onClose }) {
           </div>
         )}
 
+        {/* Episodes tab */}
         {!loading && tab === "episodes" && (
           <>
             {activeConcept && (
@@ -179,6 +239,7 @@ export default function MemoryBrowser({ onClose }) {
           </>
         )}
 
+        {/* Concepts tab */}
         {!loading && tab === "concepts" && (
           <>
             {concepts.length === 0 ? (
@@ -202,6 +263,53 @@ export default function MemoryBrowser({ onClose }) {
                   ))}
                 </div>
               </>
+            )}
+          </>
+        )}
+
+        {/* Reflections tab */}
+        {!loading && tab === "reflections" && (
+          <>
+            {/* Run button */}
+            <div style={{ marginBottom: 14 }}>
+              <button
+                onClick={handleRunConsolidation}
+                disabled={running}
+                style={{
+                  width: "100%", padding: "9px 0",
+                  background: running ? "#1a1a24" : "#7c3aed22",
+                  border: `1px solid ${running ? "#2a2a3a" : "#7c3aed"}`,
+                  borderRadius: 8, cursor: running ? "not-allowed" : "pointer",
+                  color: running ? "#6b7280" : "#a78bfa", fontSize: 13, fontWeight: 600,
+                }}
+              >
+                {running ? "Running consolidation…" : "▶ Run Consolidation Now"}
+              </button>
+
+              {runResult && (
+                <div style={{
+                  marginTop: 8, padding: "8px 12px", borderRadius: 8, fontSize: 12,
+                  background: runResult.ok ? "#0f2a1a" : "#2d1b1b",
+                  color: runResult.ok ? "#4ade80" : "#f87171",
+                  border: `1px solid ${runResult.ok ? "#166534" : "#7f1d1d"}`,
+                }}>
+                  {runResult.message}
+                </div>
+              )}
+            </div>
+
+            <p style={{ fontSize: 11, color: "#4a5568", marginBottom: 12 }}>
+              Reflections are synthesised automatically each night from concepts with 3+ episodes.
+            </p>
+
+            {reflections.length === 0 ? (
+              <div style={{ color: "#4a5568", fontSize: 13, textAlign: "center", marginTop: 30 }}>
+                No reflections yet. Chat more, then run consolidation.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {reflections.map((r) => <ReflectionCard key={r.id} reflection={r} />)}
+              </div>
             )}
           </>
         )}
