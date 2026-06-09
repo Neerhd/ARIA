@@ -37,6 +37,8 @@ class ChatRequest(BaseModel):
     stream: bool = False
     file_content: Optional[str] = None
     file_name: Optional[str] = None
+    routing_mode: Optional[str] = None   # "auto" | "manual" | "ask"
+    override_tier: Optional[int] = None  # explicit tier for manual / post-ask confirmation
 
     def effective_message(self) -> str:
         if self.message.strip():
@@ -51,6 +53,11 @@ class ChatResponse(BaseModel):
     conversation_id: str
     message_id: str
     model: str
+    tier: int = 1
+    signals: list[str] = []
+    permission_required: bool = False
+    suggested_tier: Optional[int] = None
+    suggested_model: Optional[str] = None
 
 
 class ConversationOut(BaseModel):
@@ -72,6 +79,20 @@ class MessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RoutingLog(Base):
+    __tablename__ = "routing_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    message_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    routing_mode: Mapped[str] = mapped_column(String(20), default="auto")
+    classified_tier: Mapped[int] = mapped_column(Integer, default=1)
+    actual_tier: Mapped[int] = mapped_column(Integer, default=1)
+    model_used: Mapped[str] = mapped_column(String(100), default="")
+    signals: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class ConsolidationRun(Base):

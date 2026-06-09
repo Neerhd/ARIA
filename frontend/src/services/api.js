@@ -1,11 +1,17 @@
 const BASE = "/api";
 
-export async function sendMessage(message, conversationId = null, fileContent = null, fileName = null) {
+export async function sendMessage(
+  message,
+  conversationId = null,
+  fileContent = null,
+  fileName = null,
+  routingMode = null,
+  overrideTier = null,
+) {
   const body = { message, conversation_id: conversationId };
-  if (fileContent) {
-    body.file_content = fileContent;
-    body.file_name = fileName;
-  }
+  if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
+  if (routingMode) body.routing_mode = routingMode;
+  if (overrideTier != null) body.override_tier = overrideTier;
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -77,6 +83,12 @@ export async function fetchReflections(limit = 20) {
 export async function fetchConsolidationRuns(limit = 5) {
   const res = await fetch(`${BASE}/consolidation/runs?limit=${limit}`);
   if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchRouterConfig() {
+  const res = await fetch(`${BASE}/router/config`);
+  if (!res.ok) return null;
   return res.json();
 }
 

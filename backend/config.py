@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "aria-neo4j-password"
 
+    tier1_model: str = "llama3.2:3b"
+    tier2_model: str = "qwen2.5:14b"
+    tier3_model: str = "gemini-2.0-flash"
+    tier3_api_key: str = ""
+    tier3_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
     class Config:
         env_file = str(BASE_DIR / ".env")
         case_sensitive = False

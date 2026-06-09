@@ -2,7 +2,13 @@ import { useState, useRef } from "react";
 
 const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt";
 
-export default function InputBar({ onSend, disabled }) {
+const TIER_CONFIG = {
+  1: { label: "T1", color: "#4ade80", activeColor: "#166534" },
+  2: { label: "T2", color: "#818cf8", activeColor: "#3730a3" },
+  3: { label: "T3", color: "#f87171", activeColor: "#7f1d1d" },
+};
+
+export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const fileRef = useRef(null);
@@ -67,6 +73,46 @@ export default function InputBar({ onSend, disabled }) {
           onChange={handleFileChange}
           style={{ display: "none" }}
         />
+
+        {/* Manual tier selector */}
+        {routingMode === "manual" && (
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {[1, 2, 3].map((t) => {
+              const tc = TIER_CONFIG[t];
+              const active = conversationTier === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onTierChange(t)}
+                  disabled={disabled}
+                  title={`Use Tier ${t}`}
+                  style={{
+                    padding: "6px 8px", borderRadius: 7, fontSize: 11, fontWeight: 700,
+                    cursor: disabled ? "default" : "pointer",
+                    border: `1px solid ${active ? tc.activeColor : "#2a2a3a"}`,
+                    background: active ? `${tc.color}22` : "transparent",
+                    color: active ? tc.color : "#4a5568",
+                    lineHeight: 1,
+                  }}
+                >
+                  {tc.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Auto/ask mode tier indicator */}
+        {routingMode !== "manual" && conversationTier > 1 && (
+          <div style={{
+            display: "flex", alignItems: "center", flexShrink: 0,
+            fontSize: 10, color: "#818cf8", background: "#1a1a2e",
+            border: "1px solid #3730a3", borderRadius: 6, padding: "4px 8px",
+          }}>
+            T{conversationTier}
+          </div>
+        )}
 
         {/* Paperclip button */}
         <button

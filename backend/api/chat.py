@@ -1,16 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from models.schemas import ChatRequest, ChatResponse, ConversationOut, MessageOut, Conversation, Message
-from database.sqlite import get_db
-from services.ollama_service import chat as ollama_chat, check_ollama_alive
-from services.memory_service import store_memory, search_memory
-from services.graph_service import (
-    store_episode, store_concepts, link_to_previous, reinforce,
+from models.schemas import (
+    ChatRequest, ChatResponse, ConversationOut, MessageOut,
+    Conversation, Message, RoutingLog,
 )
+from database.sqlite import get_db
+from services.ollama_service import check_ollama_alive
+from services.memory_service import store_memory, search_memory
+from services.graph_service import store_episode, store_concepts, link_to_previous, reinforce
 from services.topic_service import extract_topics
+from services.router_service import classify_action, dispatch, tier_model
 from config import settings
+from datetime import datetime, timezone
 import uuid
+import json
 import logging
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -25,19 +29,11 @@ SYSTEM_PROMPT = (
 
 # ─── Background episodic memory pipeline ──────────────────────────────────────
 
-async def _store_episode_memory(
-    episode_id: str,
-    conversation_id: str,
-    prompt: str,
-    response: str,
-):
-    """Runs after the response is sent. Writes Episode + Concepts to Neo4j."""
+async def _store_episode_memory(episode_id, conversation_id, prompt, response):
     ok = await store_episode(episode_id, conversation_id, prompt, response)
     if not ok:
         return
-
     await link_to_previous(episode_id, conversation_id)
-
     topics = await extract_topics(prompt, response)
     logger.info(f"Episode {episode_id[:8]} topics: {topics}")
     if topics:
@@ -56,8 +52,8 @@ async def send_message(
     if not user_text:
         raise HTTPException(422, "Provide a message or attach a file.")
 
-    if not await check_ollama_alive():
-        raise HTTPException(503, "Ollama is not running. Start it with: ollama serve")
+    # ── Determine routing ──────────────────────────────────────────────────────
+    routing_mode = req.routing_mode or "auto"
 
     # ── Create or load conversation ────────────────────────────────────────────
     if req.conversation_id:
@@ -66,12 +62,56 @@ async def send_message(
         )
         convo = result.scalar_one_or_none()
         if not convo:
-            raise HTTPException(404, "Conversation not found")
+            # Pre-generated ID from a permission_required flow — create it now
+            title = req.file_name or user_text[:60]
+            convo = Conversation(id=req.conversation_id, title=title)
+            db.add(convo)
+            await db.flush()
     else:
         title = req.file_name or user_text[:60]
         convo = Conversation(id=str(uuid.uuid4()), title=title)
         db.add(convo)
         await db.flush()
+
+    # ── Load recent conversation history ───────────────────────────────────────
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == convo.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history = list(reversed(history_result.scalars().all()))
+
+    # ── Classify action and determine tier ─────────────────────────────────────
+    if routing_mode == "manual" and req.override_tier is not None:
+        actual_tier = max(1, min(3, req.override_tier))
+        classified_tier = actual_tier
+        signals: list[str] = []
+    else:
+        classified_tier, signals = classify_action(req, len(history))
+        actual_tier = classified_tier
+
+    # ── Ask mode: return a permission prompt instead of calling the model ──────
+    if routing_mode == "ask" and req.override_tier is None and classified_tier > 1:
+        perm_id = str(uuid.uuid4())
+        return ChatResponse(
+            reply="",
+            conversation_id=convo.id,
+            message_id=perm_id,
+            model=tier_model(classified_tier),
+            tier=1,
+            signals=signals,
+            permission_required=True,
+            suggested_tier=classified_tier,
+            suggested_model=tier_model(classified_tier),
+        )
+
+    # ── Verify the target model is reachable ───────────────────────────────────
+    if actual_tier < 3:
+        if not await check_ollama_alive():
+            raise HTTPException(503, "Ollama is not running. Start it with: ollama serve")
+    elif not settings.tier3_api_key:
+        raise HTTPException(503, "Tier 3 model not configured — add TIER3_API_KEY to .env")
 
     # ── Retrieve relevant memories (ChromaDB) + reinforce in Neo4j ────────────
     memories = search_memory(user_text, n_results=3)
@@ -84,29 +124,20 @@ async def send_message(
         snippets = [m["text"] for m in memories]
         memory_context = "\nRelevant past context:\n" + "\n".join(f"- {s}" for s in snippets)
 
-    # ── Load recent conversation history ───────────────────────────────────────
-    history_result = await db.execute(
-        select(Message)
-        .where(Message.conversation_id == convo.id)
-        .order_by(Message.created_at.desc())
-        .limit(10)
-    )
-    history = list(reversed(history_result.scalars().all()))
-
-    # ── Build user turn (inject file if attached) ──────────────────────────────
+    # ── Build messages for the model ───────────────────────────────────────────
     if req.file_content:
         label = req.file_name or "attached file"
         user_turn = f"{user_text}\n\n[File attached: {label}]\n```\n{req.file_content}\n```"
     else:
         user_turn = user_text
 
-    # ── Call Ollama ────────────────────────────────────────────────────────────
     messages = [{"role": "system", "content": SYSTEM_PROMPT + memory_context}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
-    reply = await ollama_chat(messages, model=settings.ollama_model)
+    # ── Call the model via the router ──────────────────────────────────────────
+    reply = await dispatch(actual_tier, messages)
 
     # ── Persist to SQLite ──────────────────────────────────────────────────────
     stored_user_content = user_text
@@ -122,16 +153,27 @@ async def send_message(
         content=stored_user_content,
     )
     assistant_msg = Message(
-        id=episode_id,           # episode_id == assistant message id — shared key
+        id=episode_id,
         conversation_id=convo.id,
         role="assistant",
         content=reply,
     )
+    routing_log = RoutingLog(
+        id=str(uuid.uuid4()),
+        message_id=episode_id,
+        conversation_id=convo.id,
+        routing_mode=routing_mode,
+        classified_tier=classified_tier,
+        actual_tier=actual_tier,
+        model_used=tier_model(actual_tier),
+        signals=json.dumps(signals),
+    )
     db.add(user_msg)
     db.add(assistant_msg)
+    db.add(routing_log)
     await db.commit()
 
-    # ── Store in ChromaDB (same ID as the Neo4j episode) ──────────────────────
+    # ── Store in ChromaDB ──────────────────────────────────────────────────────
     store_memory(
         f"User: {stored_user_content}\nARIA: {reply}",
         {"conversation_id": convo.id, "type": "exchange"},
@@ -151,7 +193,9 @@ async def send_message(
         reply=reply,
         conversation_id=convo.id,
         message_id=episode_id,
-        model=settings.ollama_model,
+        model=tier_model(actual_tier),
+        tier=actual_tier,
+        signals=signals,
     )
 
 
