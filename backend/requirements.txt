@@ -1,0 +1,23 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+httpx==0.28.1
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+greenlet==3.1.1
+aiosqlite==0.20.0
+
+# ChromaDB (vector embeddings)
+chromadb==0.6.3
+
+# Neo4j (knowledge graph)
+neo4j==5.27.0
+
+# File parsing
+pymupdf==1.24.14
+
+# Utilities
+python-multipart==0.0.20
