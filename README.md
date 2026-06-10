@@ -26,25 +26,34 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                       React Frontend                          │
-│  Chat UI · File Attachments · Memory Browser · Settings      │
-└─────────────────────────┬────────────────────────────────────┘
-                          │ REST  (localhost:5173 → 8000)
-┌─────────────────────────▼────────────────────────────────────┐
-│                     FastAPI Backend                           │
-│  /chat · /files/upload · /memory/* · /consolidation/*        │
-│  /router/*                                                    │
-└────┬────────────────┬───────────────────┬─────────────────────┘
-     │                │                   │
-┌────▼────┐    ┌──────▼──────┐    ┌───────▼─────────────────┐
-│ Ollama  │    │   SQLite    │    │      Memory Layer        │
-│ T1/T2   │    │ Conversations│   │  ChromaDB (semantic)     │
-│ Chat    │    │ Messages    │    │  Neo4j (knowledge graph) │
-│ Topics  │    │ Consol. log │    │  Episodes · Concepts     │
-│ Reflect │    │ Routing log │    │  Reflections  · :7687    │
-│ :11434  │    │             │    │                          │
-└─────────┘    └─────────────┘    └──────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                         React Frontend                             │
+│  Chat · File Attachments · Memory Browser · Settings · Tool Pills │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │ REST  (localhost:5173 → 8000)
+┌──────────────────────────────▼────────────────────────────────────┐
+│                         FastAPI Backend                            │
+│  /chat · /files/upload · /memory/* · /consolidation/* · /router/* │
+│                                                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                     Agentic Tool Loop                       │  │
+│  │  web_search → SearXNG · file_reader · file_writer           │  │
+│  │  Output formats: .pdf  .docx  .xlsx  + any plain text       │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+└──────┬─────────────────┬──────────────────┬────────────────────────┘
+       │                 │                  │
+┌──────▼──────┐  ┌───────▼──────┐  ┌────────▼──────────────────┐
+│   Ollama    │  │   SQLite     │  │      Memory Layer          │
+│ T1 llama3.2 │  │ Conversations│  │  ChromaDB (semantic)       │
+│ T2 qwen2.5  │  │ Messages     │  │  Neo4j (knowledge graph)   │
+│   :11434    │  │ Routing log  │  │  Episodes · Concepts       │
+└─────────────┘  └──────────────┘  │  Reflections · Facts       │
+                                   │  :7687                     │
+┌─────────────┐                    └────────────────────────────┘
+│  Anthropic  │
+│   Claude    │  ← T3 (tools, complex tasks, reasoning)
+│  (cloud)    │
+└─────────────┘
 ```
 
 ### Memory system
@@ -56,7 +65,7 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 | **Episode** | Raw interaction: prompt, response, timestamp, recall count | ✅ Live |
 | **Concept** | Topic node linking related episodes; tracks episode frequency | ✅ Live |
 | **Reflection** | Higher-order pattern synthesised from clusters of 3+ episodes | ✅ Live |
-| **Fact** | Atomic information extracted from episodes by the model | Planned M6+ |
+| **Fact** | User-pinned permanent facts; never decay, always injected into every session | ✅ Live |
 
 **Memory pipeline (currently active):**
 
@@ -78,7 +87,7 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 | M3 | Memory Layer v1 | Episodic memory capture, topic extraction, knowledge graph | ✅ Complete |
 | M4 | Consolidation Pipeline | Reflection synthesis, nightly scheduler, memory browser UI | ✅ Complete |
 | M5 | Model Router | 3-tier action-based router, three modes, tier badges, routing logged | ✅ Complete |
-| M6 | Tool System | File reader + SearXNG web search as agent tools | Planned |
+| M6 | Tools + Permanent Memory | Web search, file reader/writer, multi-format export, pinned facts | ✅ Complete |
 | M7 | MVP Testing | End-to-end testing, memory pattern validation | Planned |
 | M8 | MVP Complete | Stable system, ready for Phase 2 | Planned |
 
@@ -185,7 +194,9 @@ ARIA/
 │       ├── graph_service.py          # All Neo4j read/write operations
 │       ├── memory_service.py         # ChromaDB store and semantic search
 │       ├── ollama_service.py         # Ollama chat and health check
-│       ├── router_service.py         # Tier classification, model dispatch
+│       ├── router_service.py         # Tier classification, Ollama + Anthropic + OpenAI dispatch
+│       ├── tool_service.py           # Tool definitions, executors, agentic loop, format writers
+│       ├── web_search_service.py     # SearXNG wrapper
 │       └── topic_service.py          # Topic tag extraction from conversations
 ├── frontend/
 │   ├── index.html              # Vite entry point
@@ -219,11 +230,20 @@ Click **🧠 Memory** in the top-right corner to open the memory panel. It has t
 
 | Tab | What it shows |
 |---|---|
+| **Pinned** | Permanent facts saved with "remember this" — always injected into every conversation, never decay. Click the delete button to remove a fact. |
 | **Episodes** | Every conversation turn stored in Neo4j, with topic tags and recall count. Click a card to expand the full prompt and response. |
 | **Concepts** | All topic nodes extracted from conversations, sorted by frequency. Click a concept to filter the Episodes tab. |
 | **Reflections** | Higher-order patterns synthesised by the consolidation pipeline. Each card shows the concept, the synthesised insight, and how many episodes it was drawn from. Use the **Run Consolidation Now** button to trigger synthesis on demand. |
 
 Reflections are also generated automatically every 24 hours by the background scheduler.
+
+### Permanent memory
+
+Say **"remember this"**, **"save this"**, **"don't forget"**, or **"note that"** followed by any fact and ARIA will store it permanently in Neo4j as a pinned `Fact` node. Pinned facts are:
+
+- Injected at the top of every conversation's system prompt
+- Never subject to memory decay or consolidation
+- Visible and deletable in the **Pinned** tab of the Memory Browser
 
 ---
 
@@ -235,7 +255,9 @@ ARIA has a three-tier model system. The router automatically picks the right mod
 |---|---|---|
 | **T1** | `llama3.2:3b` (local, ~2 GB) | Default — fast responses for casual chat and simple questions |
 | **T2** | `qwen2.5:14b` (local, ~9 GB) | File attached, or conversation exceeds 15 messages |
-| **T3** | `gemini-2.0-flash` (cloud) | Manual only — requires `TIER3_API_KEY` in `.env` |
+| **T3** | `claude-sonnet-4-6` (cloud) | Any tool enabled (web search, file reader/writer), or manually selected |
+
+T3 auto-activates whenever a tool is enabled because local models do not reliably generate structured tool calls. T3 requires `TIER3_API_KEY` in `.env`.
 
 ### Routing modes
 
@@ -251,7 +273,33 @@ Every routing decision is logged to the `routing_logs` SQLite table with the mod
 
 ---
 
-## Supported file types
+## Tools
+
+Enable tools in **⚙ Settings → Tools**. Enabling any tool automatically routes the request to T3 (Claude Sonnet) for reliable agentic execution.
+
+| Tool | What it does | Notes |
+|---|---|---|
+| **Web Search** 🔍 | Searches the web via a self-hosted SearXNG instance and returns results to ARIA | Requires SearXNG on `localhost:8080` (installed automatically) |
+| **File Reader** 📂 | Reads any local file by absolute path | Supports all text formats up to 50,000 characters |
+| **File Writer** 💾 | Creates files at any absolute path | Supports rich output formats (see below) |
+
+### File output formats
+
+When using the File Writer tool, ARIA writes content as Markdown and the backend converts it automatically based on the file extension:
+
+| Extension | Format | What gets generated |
+|---|---|---|
+| `.pdf` | PDF | Formatted A4 PDF — headings, bullet lists, horizontal rules |
+| `.docx` | Word document | Styled Word doc — heading styles, bold/italic, lists |
+| `.xlsx` | Excel spreadsheet | Parses Markdown tables or CSV content into a formatted sheet |
+| `.txt`, `.md`, `.html`, `.json`, `.csv`, `.py`, etc. | Plain text | Written as-is |
+
+Example prompts:
+- *"Research X and save a report to ~/Desktop/report.pdf"*
+- *"Create a project plan and save it as ~/Documents/plan.docx"*
+- *"Make a comparison table and save to ~/Desktop/data.xlsx"*
+
+## Supported file types (attachments)
 
 You can attach files directly in the chat interface. ARIA will read the content and answer questions about it.
 
@@ -285,9 +333,9 @@ All configuration lives in `.env`. Key values:
 |---|---|---|
 | `TIER1_MODEL` | `llama3.2:3b` | Fast local model — casual chat, quick questions |
 | `TIER2_MODEL` | `qwen2.5:14b` | Capable local model — file analysis, long conversations |
-| `TIER3_MODEL` | `gemini-2.0-flash` | Cloud model model name (optional) |
-| `TIER3_API_KEY` | *(empty)* | API key for Tier 3. Leave empty to disable cloud. For Gemini, get a free key at [aistudio.google.com](https://aistudio.google.com) |
-| `TIER3_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai/` | OpenAI-compatible base URL for Tier 3 provider |
+| `TIER3_MODEL` | `claude-sonnet-4-6` | Cloud model name |
+| `TIER3_API_KEY` | *(empty)* | API key for Tier 3. For Claude: get a key at [console.anthropic.com](https://console.anthropic.com). Leave empty to disable cloud. |
+| `TIER3_BASE_URL` | `https://api.anthropic.com/v1` | Base URL. Set to `https://generativelanguage.googleapis.com/v1beta/openai/` to use Gemini instead. |
 
 Tier 3 is disabled by default. ARIA works fully offline with just Tier 1 and Tier 2.
 
@@ -317,7 +365,9 @@ The backend exposes a REST API documented interactively at [http://localhost:800
 |---|---|---|
 | `GET` | `/memory/episodes` | Recent episodes with topics (`?limit=`) |
 | `GET` | `/memory/concepts` | Top concepts by episode count (`?limit=`) |
-| `GET` | `/memory/stats` | Count of episodes, concepts, and reflections |
+| `GET` | `/memory/stats` | Count of episodes, concepts, reflections, and pinned facts |
+| `GET` | `/memory/pinned` | All pinned Fact nodes |
+| `DELETE` | `/memory/pinned/{fact_id}` | Delete a pinned fact |
 
 ### Consolidation
 

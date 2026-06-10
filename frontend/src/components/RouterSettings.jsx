@@ -26,14 +26,14 @@ const TOOLS = [
     label: "File Reader",
     icon: "📂",
     desc: "ARIA can read any local file by path during the conversation.",
-    note: "Works on all tiers — no upgrade required",
+    note: "Auto-upgrades to T3 for reliable tool execution",
   },
   {
     key: "file_writer",
     label: "File Writer",
     icon: "💾",
     desc: "ARIA can create and write files to any local path (e.g. save a report to your Desktop).",
-    note: "Works on all tiers — creates missing directories automatically",
+    note: "Auto-upgrades to T3 for reliable tool execution",
   },
 ];
 

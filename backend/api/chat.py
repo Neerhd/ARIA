@@ -170,6 +170,40 @@ async def send_message(
             "Briefly confirm you've saved it to permanent memory — one sentence is enough.]"
         )
 
+    # ── Build tool-capability instruction (overrides trained refusals) ────────
+    tools_enabled = req.tools_enabled or []
+    tool_instruction = ""
+    if tools_enabled:
+        import getpass as _gp
+        from pathlib import Path as _P
+        _username = _gp.getuser()
+        _home = str(_P.home())
+        _TOOL_CAPS = {
+            "web_search":  "search the web for current information via web_search(query)",
+            "file_reader": f"read any local file by absolute path via file_reader(path). Home directory: {_home}",
+            "file_writer": (
+                f"create and write files to any absolute path via file_writer(path, content). "
+                f"Home directory: {_home}. Username: {_username}. "
+                f"Example Desktop path: {_home}/Desktop/filename.txt. "
+                "Supported formats: .txt .md .html .json .csv .py and any text format (written as-is); "
+                ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
+                ".xlsx (markdown table or CSV → spreadsheet). "
+                "Always write content as Markdown — the system converts it to the target format automatically."
+            ),
+        }
+        cap_lines = "\n".join(
+            f"  - {_TOOL_CAPS[t]}" for t in tools_enabled if t in _TOOL_CAPS
+        )
+        tool_instruction = (
+            "\n\nYou have the following tools and MUST use them — never claim you cannot "
+            "perform an action that one of your tools can do:\n"
+            + cap_lines
+            + f"\nSystem info: username={_username}, home={_home}"
+            + "\nIMPORTANT: Always use absolute paths. Never use shell substitutions like $(whoami) or $USER — use the literal values above."
+            + "\nDo not ask the user to do things manually if a tool can do it. "
+            "Call the appropriate tool directly and confirm the result to the user."
+        )
+
     # ── Build messages for the model ───────────────────────────────────────────
     if req.file_content:
         label = req.file_name or "attached file"
@@ -177,13 +211,12 @@ async def send_message(
     else:
         user_turn = user_text
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + memory_context}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + tool_instruction + memory_context}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
     # ── Call the model (with agentic tool loop if tools are enabled) ───────────
-    tools_enabled = req.tools_enabled or []
     if tools_enabled:
         reply, tools_used = await run_agentic_loop(actual_tier, messages, tools_enabled)
     else:

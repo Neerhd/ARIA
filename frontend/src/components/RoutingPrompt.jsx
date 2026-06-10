@@ -1,6 +1,9 @@
 const SIGNAL_ICONS = {
   "file attached": "📎",
   "long conversation (15+ messages)": "💬",
+  "web search enabled (→ T3)": "🔍",
+  "file writer enabled (→ T3)": "💾",
+  "file reader enabled (→ T3)": "📂",
 };
 
 export default function RoutingPrompt({ data, onConfirm, onDecline }) {
