@@ -86,14 +86,11 @@ if [ ! -d "$SEARXNG_DIR/.venv" ]; then
 fi
 "$SEARXNG_DIR/.venv/bin/pip" install --upgrade pip --quiet
 
-# SearXNG's __init__.py imports msgspec at module level, so pip's isolated build
-# environment fails before any deps are installed. Install requirements.txt first
-# so msgspec (and everything else) is present, then use --no-build-isolation so
-# the editable install reuses the venv instead of a clean temp environment.
+# Skip the editable install entirely — Python 3.12 venvs don't ship setuptools,
+# so both isolation modes fail. We run SearXNG directly from its source tree
+# via PYTHONPATH in start.sh; all we need here is the runtime dependencies.
 echo "    Installing SearXNG dependencies..."
 "$SEARXNG_DIR/.venv/bin/pip" install -r "$SEARXNG_DIR/src/requirements.txt" --quiet
-echo "    Installing SearXNG package (editable)..."
-"$SEARXNG_DIR/.venv/bin/pip" install -e "$SEARXNG_DIR/src" --no-build-isolation --quiet
 echo "✅  SearXNG installed"
 
 # Write minimal settings.yml

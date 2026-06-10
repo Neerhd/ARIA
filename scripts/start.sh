@@ -31,20 +31,22 @@ echo "✅  Neo4j started  →  http://localhost:7474"
 # ─── SearXNG ──────────────────────────────────────────────────────────────────
 echo "▶  Starting SearXNG..."
 SEARXNG_DIR="$ARIA_DIR/searxng"
-SEARXNG_BIN="$SEARXNG_DIR/.venv/bin/searxng-run"
+SEARXNG_PYTHON="$SEARXNG_DIR/.venv/bin/python"
+SEARXNG_WEBAPP="$SEARXNG_DIR/src/searx/webapp.py"
 SEARXNG_SETTINGS="$SEARXNG_DIR/settings.yml"
 
-if [ ! -f "$SEARXNG_BIN" ]; then
+if [ ! -f "$SEARXNG_PYTHON" ] || [ ! -f "$SEARXNG_WEBAPP" ]; then
   echo "⚠️  SearXNG not installed — run ./scripts/install.sh first"
   echo "    Web search tool will be unavailable until SearXNG is installed."
 else
+  # Run directly from source tree — no editable install required
+  PYTHONPATH="$SEARXNG_DIR/src" \
   SEARXNG_SETTINGS_PATH="$SEARXNG_SETTINGS" \
-    "$SEARXNG_BIN" > "$ARIA_DIR/logs/searxng.log" 2>&1 &
+    "$SEARXNG_PYTHON" "$SEARXNG_WEBAPP" > "$ARIA_DIR/logs/searxng.log" 2>&1 &
   echo $! > "$PID_DIR/searxng.pid"
   sleep 4
   # Quick health check
-  if curl -sf "http://localhost:8080/healthz" &>/dev/null || \
-     curl -sf "http://localhost:8080" &>/dev/null; then
+  if curl -sf "http://localhost:8080" &>/dev/null; then
     echo "✅  SearXNG started →  http://localhost:8080"
   else
     echo "⚠️  SearXNG may still be starting — check logs/searxng.log if web search fails"
