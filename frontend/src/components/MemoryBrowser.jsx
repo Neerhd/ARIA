@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   fetchMemoryEpisodes, fetchMemoryConcepts, fetchMemoryStats,
   fetchReflections, triggerConsolidation,
+  fetchPinnedFacts, deletePinnedFact,
 } from "../services/api";
 
 function timeAgo(isoString) {
@@ -81,6 +82,62 @@ function EpisodeCard({ episode }) {
   );
 }
 
+function PinnedFactCard({ fact, onDelete }) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirming) { setConfirming(true); return; }
+    setDeleting(true);
+    try {
+      await onDelete(fact.id);
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: "#13131e",
+      border: "1px solid #3d2a6a",
+      borderRadius: 10,
+      padding: "12px 14px",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 10,
+    }}>
+      <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>📌</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13, color: "#e2e8f0", margin: 0, lineHeight: 1.5, wordBreak: "break-word" }}>
+          {fact.text}
+        </p>
+        <span style={{ fontSize: 11, color: "#4a5568", marginTop: 4, display: "block" }}>
+          {timeAgo(fact.created_at)}
+        </span>
+      </div>
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        title={confirming ? "Click again to confirm" : "Remove pinned fact"}
+        style={{
+          background: confirming ? "#7f1d1d44" : "transparent",
+          border: `1px solid ${confirming ? "#ef4444" : "#2a2a3a"}`,
+          borderRadius: 6,
+          color: confirming ? "#ef4444" : "#4a5568",
+          cursor: "pointer",
+          fontSize: 12,
+          padding: "3px 8px",
+          flexShrink: 0,
+          transition: "all 0.15s",
+        }}
+      >
+        {deleting ? "…" : confirming ? "Confirm" : "×"}
+      </button>
+    </div>
+  );
+}
+
 function ReflectionCard({ reflection }) {
   return (
     <div style={{
@@ -107,11 +164,12 @@ function ReflectionCard({ reflection }) {
 }
 
 export default function MemoryBrowser({ onClose }) {
-  const [tab, setTab] = useState("episodes");
+  const [tab, setTab] = useState("pinned");
   const [episodes, setEpisodes] = useState([]);
   const [concepts, setConcepts] = useState([]);
   const [stats, setStats] = useState(null);
   const [reflections, setReflections] = useState([]);
+  const [pinnedFacts, setPinnedFacts] = useState([]);
   const [activeConcept, setActiveConcept] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -124,11 +182,13 @@ export default function MemoryBrowser({ onClose }) {
       fetchMemoryConcepts(50),
       fetchMemoryStats(),
       fetchReflections(20),
-    ]).then(([eps, cons, st, refs]) => {
+      fetchPinnedFacts(),
+    ]).then(([eps, cons, st, refs, pins]) => {
       setEpisodes(eps);
       setConcepts(cons);
       setStats(st);
       setReflections(refs);
+      setPinnedFacts(pins);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -161,11 +221,17 @@ export default function MemoryBrowser({ onClose }) {
     }
   };
 
+  const handleDeleteFact = async (factId) => {
+    await deletePinnedFact(factId);
+    setPinnedFacts((prev) => prev.filter((f) => f.id !== factId));
+    setStats((prev) => prev ? { ...prev, facts: Math.max(0, (prev.facts ?? 1) - 1) } : prev);
+  };
+
   const visibleEpisodes = activeConcept
     ? episodes.filter((e) => (e.topics || []).includes(activeConcept))
     : episodes;
 
-  const tabs = ["episodes", "concepts", "reflections"];
+  const tabs = ["pinned", "episodes", "concepts", "reflections"];
 
   return (
     <div style={{
@@ -182,7 +248,7 @@ export default function MemoryBrowser({ onClose }) {
           <div style={{ fontWeight: 700, fontSize: 15 }}>🧠 Memory</div>
           {stats && (
             <div style={{ fontSize: 11, color: "#4a5568", marginTop: 2 }}>
-              {stats.episodes ?? 0} episodes · {stats.concepts ?? 0} concepts · {stats.reflections ?? 0} reflections
+              {stats.episodes ?? 0} episodes · {stats.concepts ?? 0} concepts · {stats.reflections ?? 0} reflections · {stats.facts ?? 0} pinned
             </div>
           )}
         </div>
@@ -214,6 +280,28 @@ export default function MemoryBrowser({ onClose }) {
           <div style={{ color: "#4a5568", fontSize: 13, textAlign: "center", marginTop: 40 }}>
             Loading memory…
           </div>
+        )}
+
+        {/* Pinned tab */}
+        {!loading && tab === "pinned" && (
+          <>
+            <p style={{ fontSize: 12, color: "#4a5568", marginBottom: 12 }}>
+              Say <span style={{ color: "#a78bfa" }}>"remember this"</span> or{" "}
+              <span style={{ color: "#a78bfa" }}>"save this"</span> during any conversation to pin a fact permanently.
+              Pinned facts are always injected into every conversation.
+            </p>
+            {pinnedFacts.length === 0 ? (
+              <div style={{ color: "#4a5568", fontSize: 13, textAlign: "center", marginTop: 40 }}>
+                No pinned facts yet.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {pinnedFacts.map((f) => (
+                  <PinnedFactCard key={f.id} fact={f} onDelete={handleDeleteFact} />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Episodes tab */}

@@ -80,6 +80,21 @@ export async function fetchReflections(limit = 20) {
   return res.json();
 }
 
+export async function fetchPinnedFacts() {
+  const res = await fetch(`${BASE}/memory/pinned`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function deletePinnedFact(factId) {
+  const res = await fetch(`${BASE}/memory/pinned/${factId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchConsolidationRuns(limit = 5) {
   const res = await fetch(`${BASE}/consolidation/runs?limit=${limit}`);
   if (!res.ok) return [];

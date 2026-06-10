@@ -26,6 +26,10 @@ async def init_graph_schema():
                 "FOR (r:Reflection) REQUIRE r.id IS UNIQUE"
             )
             await s.run(
+                "CREATE CONSTRAINT fact_id IF NOT EXISTS "
+                "FOR (f:Fact) REQUIRE f.id IS UNIQUE"
+            )
+            await s.run(
                 "CREATE INDEX episode_convo IF NOT EXISTS "
                 "FOR (e:Episode) ON (e.conversation_id)"
             )
@@ -220,17 +224,23 @@ async def get_graph_stats() -> dict:
                 MATCH (e:Episode) WITH count(e) AS episodes
                 MATCH (c:Concept) WITH episodes, count(c) AS concepts
                 OPTIONAL MATCH (r:Reflection) WITH episodes, concepts, count(r) AS reflections
-                RETURN episodes, concepts, reflections
+                OPTIONAL MATCH (f:Fact {user_pinned: true}) WITH episodes, concepts, reflections, count(f) AS facts
+                RETURN episodes, concepts, reflections, facts
                 """
             )
             row = await result.single()
             return (
-                {"episodes": row["episodes"], "concepts": row["concepts"], "reflections": row["reflections"]}
+                {
+                    "episodes": row["episodes"],
+                    "concepts": row["concepts"],
+                    "reflections": row["reflections"],
+                    "facts": row["facts"],
+                }
                 if row else {}
             )
     except Exception as e:
         logger.warning(f"get_graph_stats failed: {e}")
-        return {"episodes": 0, "concepts": 0, "reflections": 0}
+        return {"episodes": 0, "concepts": 0, "reflections": 0, "facts": 0}
 
 
 # ─── Consolidation pipeline ────────────────────────────────────────────────────
@@ -333,3 +343,64 @@ async def get_reflections(limit: int = 20) -> list[dict]:
     except Exception as e:
         logger.warning(f"get_reflections failed: {e}")
         return []
+
+
+# ─── Permanent (pinned) facts ──────────────────────────────────────────────────
+
+async def store_fact(fact_id: str, text: str, raw_message: str) -> bool:
+    """Create a user-pinned Fact node. Permanent — never decays."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            await s.run(
+                """
+                MERGE (f:Fact {id: $id})
+                ON CREATE SET
+                    f.text        = $text,
+                    f.raw_message = $raw_message,
+                    f.created_at  = $created_at,
+                    f.user_pinned = true
+                """,
+                id=fact_id,
+                text=text,
+                raw_message=raw_message,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        return True
+    except Exception as e:
+        logger.warning(f"store_fact failed: {e}")
+        return False
+
+
+async def get_pinned_facts() -> list[dict]:
+    """Return all user-pinned facts ordered oldest-first."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (f:Fact {user_pinned: true})
+                RETURN f.id AS id, f.text AS text,
+                       f.raw_message AS raw_message, f.created_at AS created_at
+                ORDER BY f.created_at ASC
+                """
+            )
+            return [dict(r) for r in await result.data()]
+    except Exception as e:
+        logger.warning(f"get_pinned_facts failed: {e}")
+        return []
+
+
+async def delete_pinned_fact(fact_id: str) -> bool:
+    """Permanently remove a pinned Fact node."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            await s.run(
+                "MATCH (f:Fact {id: $id}) DETACH DELETE f",
+                id=fact_id,
+            )
+        return True
+    except Exception as e:
+        logger.warning(f"delete_pinned_fact failed: {e}")
+        return False

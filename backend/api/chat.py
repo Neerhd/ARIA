@@ -8,13 +8,17 @@ from models.schemas import (
 from database.sqlite import get_db
 from services.ollama_service import check_ollama_alive
 from services.memory_service import store_memory, search_memory
-from services.graph_service import store_episode, store_concepts, link_to_previous, reinforce
+from services.graph_service import (
+    store_episode, store_concepts, link_to_previous, reinforce,
+    store_fact, get_pinned_facts,
+)
 from services.topic_service import extract_topics
 from services.router_service import classify_action, dispatch, tier_model
 from config import settings
 from datetime import datetime, timezone
 import uuid
 import json
+import re
 import logging
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -25,6 +29,27 @@ SYSTEM_PROMPT = (
     "You are a helpful, thoughtful, and concise personal AI assistant. "
     "You have access to the user's conversation history and can reference past context."
 )
+
+# Matches phrases like "remember this", "save that", "don't forget", etc.
+_REMEMBER_RE = re.compile(
+    r"^\s*"
+    r"(remember\s+(this|that|:|this:?|that:?)?|"
+    r"save\s+(this|that)|"
+    r"don'?t\s+forget[:\s]|"
+    r"keep\s+in\s+mind[:\s]|"
+    r"note\s+that[:\s]|"
+    r"please\s+remember[:\s]?)",
+    re.IGNORECASE,
+)
+
+
+def _extract_fact(text: str) -> str | None:
+    """Return the fact substring if the message is a remember request, else None."""
+    m = _REMEMBER_RE.match(text)
+    if not m:
+        return None
+    fact = text[m.end():].strip(" .,:;—-–\n")
+    return fact if len(fact) >= 3 else None
 
 
 # ─── Background episodic memory pipeline ──────────────────────────────────────
@@ -113,6 +138,13 @@ async def send_message(
     elif not settings.tier3_api_key:
         raise HTTPException(503, "Tier 3 model not configured — add TIER3_API_KEY to .env")
 
+    # ── Detect "remember" intent and queue fact storage ────────────────────────
+    new_fact_text = _extract_fact(user_text)
+    if new_fact_text:
+        fact_id = str(uuid.uuid4())
+        background_tasks.add_task(store_fact, fact_id, new_fact_text, user_text)
+        logger.info(f"Pinning new fact: {new_fact_text[:80]}")
+
     # ── Retrieve relevant memories (ChromaDB) + reinforce in Neo4j ────────────
     memories = search_memory(user_text, n_results=3)
     recalled_ids = [m["id"] for m in memories if m.get("id")]
@@ -123,6 +155,19 @@ async def send_message(
     if memories:
         snippets = [m["text"] for m in memories]
         memory_context = "\nRelevant past context:\n" + "\n".join(f"- {s}" for s in snippets)
+
+    # ── Inject pinned facts (always present in every turn) ─────────────────────
+    pinned_facts = await get_pinned_facts()
+    if pinned_facts:
+        lines = "\n".join(f"- {f['text']}" for f in pinned_facts)
+        memory_context = f"\n\nPinned facts (always remember these):\n{lines}" + memory_context
+
+    # ── If this is a remember request, guide ARIA to acknowledge it ───────────
+    if new_fact_text:
+        memory_context += (
+            f"\n\n[System: The user asked you to permanently remember: \"{new_fact_text}\". "
+            "Briefly confirm you've saved it to permanent memory — one sentence is enough.]"
+        )
 
     # ── Build messages for the model ───────────────────────────────────────────
     if req.file_content:

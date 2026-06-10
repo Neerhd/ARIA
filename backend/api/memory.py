@@ -1,5 +1,8 @@
-from fastapi import APIRouter
-from services.graph_service import get_recent_episodes, get_top_concepts, get_graph_stats
+from fastapi import APIRouter, HTTPException
+from services.graph_service import (
+    get_recent_episodes, get_top_concepts, get_graph_stats,
+    get_pinned_facts, delete_pinned_fact,
+)
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -17,3 +20,16 @@ async def concepts(limit: int = 40):
 @router.get("/stats")
 async def stats():
     return await get_graph_stats()
+
+
+@router.get("/pinned")
+async def pinned():
+    return await get_pinned_facts()
+
+
+@router.delete("/pinned/{fact_id}")
+async def remove_pinned(fact_id: str):
+    ok = await delete_pinned_fact(fact_id)
+    if not ok:
+        raise HTTPException(500, "Failed to delete pinned fact")
+    return {"deleted": True}
