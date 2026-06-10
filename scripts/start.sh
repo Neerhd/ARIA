@@ -2,11 +2,12 @@
 # ARIA – Start all services
 ARIA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PID_DIR="$ARIA_DIR/.pids"
-mkdir -p "$PID_DIR"
+mkdir -p "$PID_DIR" "$ARIA_DIR/logs"
 
 cleanup() {
   echo ""
   echo "⏹  Stopping ARIA services..."
+  [ -f "$PID_DIR/searxng.pid" ]  && kill "$(cat $PID_DIR/searxng.pid)"  2>/dev/null; rm -f "$PID_DIR/searxng.pid"
   [ -f "$PID_DIR/ollama.pid" ]   && kill "$(cat $PID_DIR/ollama.pid)"   2>/dev/null; rm -f "$PID_DIR/ollama.pid"
   [ -f "$PID_DIR/backend.pid" ]  && kill "$(cat $PID_DIR/backend.pid)"  2>/dev/null; rm -f "$PID_DIR/backend.pid"
   [ -f "$PID_DIR/frontend.pid" ] && kill "$(cat $PID_DIR/frontend.pid)" 2>/dev/null; rm -f "$PID_DIR/frontend.pid"
@@ -27,6 +28,29 @@ brew services start neo4j
 sleep 3
 echo "✅  Neo4j started  →  http://localhost:7474"
 
+# ─── SearXNG ──────────────────────────────────────────────────────────────────
+echo "▶  Starting SearXNG..."
+SEARXNG_DIR="$ARIA_DIR/searxng"
+SEARXNG_BIN="$SEARXNG_DIR/.venv/bin/searxng-run"
+SEARXNG_SETTINGS="$SEARXNG_DIR/settings.yml"
+
+if [ ! -f "$SEARXNG_BIN" ]; then
+  echo "⚠️  SearXNG not installed — run ./scripts/install.sh first"
+  echo "    Web search tool will be unavailable until SearXNG is installed."
+else
+  SEARXNG_SETTINGS_PATH="$SEARXNG_SETTINGS" \
+    "$SEARXNG_BIN" > "$ARIA_DIR/logs/searxng.log" 2>&1 &
+  echo $! > "$PID_DIR/searxng.pid"
+  sleep 4
+  # Quick health check
+  if curl -sf "http://localhost:8080/healthz" &>/dev/null || \
+     curl -sf "http://localhost:8080" &>/dev/null; then
+    echo "✅  SearXNG started →  http://localhost:8080"
+  else
+    echo "⚠️  SearXNG may still be starting — check logs/searxng.log if web search fails"
+  fi
+fi
+
 # ─── Ollama ───────────────────────────────────────────────────────────────────
 echo "▶  Starting Ollama..."
 ollama serve > "$ARIA_DIR/logs/ollama.log" 2>&1 &
@@ -36,7 +60,6 @@ echo "✅  Ollama started  →  http://localhost:11434"
 
 # ─── Backend ──────────────────────────────────────────────────────────────────
 echo "▶  Starting FastAPI backend..."
-mkdir -p "$ARIA_DIR/logs"
 cd "$ARIA_DIR/backend"
 source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload > "$ARIA_DIR/logs/backend.log" 2>&1 &
@@ -53,15 +76,16 @@ sleep 2
 echo "✅  Frontend started →  http://localhost:5173"
 
 echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║   ARIA is running!                       ║"
-echo "║                                          ║"
-echo "║   Open: http://localhost:5173            ║"
-echo "║   API:  http://localhost:8000/docs       ║"
-echo "║   Neo4j: http://localhost:7474           ║"
-echo "║                                          ║"
-echo "║   Press Ctrl+C to stop everything       ║"
-echo "╚══════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════╗"
+echo "║   ARIA is running!                           ║"
+echo "║                                              ║"
+echo "║   Open:    http://localhost:5173             ║"
+echo "║   API:     http://localhost:8000/docs        ║"
+echo "║   Neo4j:   http://localhost:7474             ║"
+echo "║   SearXNG: http://localhost:8080             ║"
+echo "║                                              ║"
+echo "║   Press Ctrl+C to stop everything           ║"
+echo "╚══════════════════════════════════════════════╝"
 echo ""
 
 # Keep script running so Ctrl+C triggers cleanup

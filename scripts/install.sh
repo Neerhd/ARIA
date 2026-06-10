@@ -66,7 +66,54 @@ cd "$ARIA_DIR/frontend"
 npm install
 echo "✅  Frontend dependencies installed"
 
-# ─── 7. Pull Ollama model ─────────────────────────────────────────────────────
+# ─── 7. SearXNG (self-hosted web search) ──────────────────────────────────────
+echo ""
+echo "🔍  Installing SearXNG (self-hosted web search)..."
+SEARXNG_DIR="$ARIA_DIR/searxng"
+mkdir -p "$SEARXNG_DIR"
+
+# Clone source (shallow) if not already present
+if [ ! -d "$SEARXNG_DIR/src/.git" ]; then
+  echo "    Cloning SearXNG source (shallow)..."
+  git clone --depth 1 https://github.com/searxng/searxng.git "$SEARXNG_DIR/src"
+else
+  echo "    SearXNG source already present — skipping clone"
+fi
+
+# Create dedicated venv if needed
+if [ ! -d "$SEARXNG_DIR/.venv" ]; then
+  $PYTHON -m venv "$SEARXNG_DIR/.venv"
+fi
+echo "    Installing SearXNG Python package..."
+"$SEARXNG_DIR/.venv/bin/pip" install --upgrade pip --quiet
+"$SEARXNG_DIR/.venv/bin/pip" install -e "$SEARXNG_DIR/src" --quiet
+echo "✅  SearXNG installed"
+
+# Write minimal settings.yml
+if [ ! -f "$SEARXNG_DIR/settings.yml" ]; then
+  cat > "$SEARXNG_DIR/settings.yml" << 'YAML'
+use_default_settings: true
+
+server:
+  port: 8080
+  bind_address: "127.0.0.1"
+  secret_key: "aria-searxng-local-secret-key"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  default_lang: "auto"
+  formats:
+    - html
+    - json
+YAML
+  echo "✅  SearXNG settings written →  searxng/settings.yml"
+else
+  echo "✅  SearXNG settings already present"
+fi
+
+# ─── 8. Pull Ollama model ─────────────────────────────────────────────────────
 echo ""
 echo "🤖  Starting Ollama and pulling llama3.2:3b model..."
 echo "    (This is ~2 GB — may take a few minutes on first run)"
