@@ -13,7 +13,24 @@ const TIER_COLORS = {
   3: { color: "#f87171", border: "#7f1d1d" },
 };
 
-export default function RouterSettings({ routingMode, onModeChange, onClose }) {
+const TOOLS = [
+  {
+    key: "web_search",
+    label: "Web Search",
+    icon: "🔍",
+    desc: "Search the web via SearXNG (self-hosted). Auto-upgrades to T3 when enabled.",
+    note: "Requires SearXNG running on localhost:8080",
+  },
+  {
+    key: "file_reader",
+    label: "File Reader",
+    icon: "📂",
+    desc: "ARIA can read any local file by path during the conversation.",
+    note: "Works on all tiers — no upgrade required",
+  },
+];
+
+export default function RouterSettings({ routingMode, onModeChange, toolsEnabled, onToolToggle, onClose }) {
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
@@ -63,6 +80,55 @@ export default function RouterSettings({ routingMode, onModeChange, onClose }) {
                 <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{desc}</div>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Tools */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: 1, marginBottom: 10 }}>
+            TOOLS
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {TOOLS.map(({ key, label, icon, desc, note }) => {
+              const active = toolsEnabled.includes(key);
+              return (
+                <div
+                  key={key}
+                  style={{
+                    padding: "10px 12px", borderRadius: 8,
+                    border: `1px solid ${active ? "#7c3aed" : "#2a2a3a"}`,
+                    background: active ? "#7c3aed11" : "#1a1a24",
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => onToolToggle(key, !active)}
+                >
+                  <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: active ? "#a78bfa" : "#e2e8f0", marginBottom: 2,
+                    }}>
+                      {active ? "✓ " : ""}{label}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4, marginBottom: 3 }}>{desc}</div>
+                    <div style={{ fontSize: 10, color: "#4a5568" }}>{note}</div>
+                  </div>
+                  <div style={{
+                    width: 36, height: 20, borderRadius: 10, flexShrink: 0, marginTop: 2,
+                    background: active ? "#7c3aed" : "#2a2a3a",
+                    position: "relative", transition: "background 0.2s",
+                  }}>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                      position: "absolute", top: 3,
+                      left: active ? 19 : 3,
+                      transition: "left 0.2s",
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

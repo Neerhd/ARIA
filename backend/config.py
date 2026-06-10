@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     tier3_api_key: str = ""
     tier3_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
+    searxng_base_url: str = "http://localhost:8080"
+
     class Config:
         env_file = str(BASE_DIR / ".env")
         case_sensitive = False

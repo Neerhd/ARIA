@@ -8,7 +8,9 @@ const TIER_CONFIG = {
   3: { label: "T3", color: "#f87171", activeColor: "#7f1d1d" },
 };
 
-export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange }) {
+const TOOL_ICONS = { web_search: "🔍", file_reader: "📂" };
+
+export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, toolsEnabled = [] }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const fileRef = useRef(null);
@@ -41,6 +43,21 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
 
   return (
     <div style={{ borderTop: "1px solid #2a2a3a", background: "#13131e" }}>
+      {/* Active tool pills */}
+      {toolsEnabled.length > 0 && (
+        <div style={{ padding: "6px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {toolsEnabled.map((t) => (
+            <span key={t} style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              background: "#1e1e2e", border: "1px solid #3730a3",
+              borderRadius: 6, padding: "2px 8px", fontSize: 11, color: "#818cf8",
+            }}>
+              {TOOL_ICONS[t] || "🔧"} {t.replace("_", " ")}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* File attachment chip */}
       {file && (
         <div style={{ padding: "6px 20px 0", display: "flex", alignItems: "center", gap: 8 }}>

@@ -14,6 +14,7 @@ from services.graph_service import (
 )
 from services.topic_service import extract_topics
 from services.router_service import classify_action, dispatch, tier_model
+from services.tool_service import run_agentic_loop
 from config import settings
 from datetime import datetime, timezone
 import uuid
@@ -181,8 +182,13 @@ async def send_message(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
-    # ── Call the model via the router ──────────────────────────────────────────
-    reply = await dispatch(actual_tier, messages)
+    # ── Call the model (with agentic tool loop if tools are enabled) ───────────
+    tools_enabled = req.tools_enabled or []
+    if tools_enabled:
+        reply, tools_used = await run_agentic_loop(actual_tier, messages, tools_enabled)
+    else:
+        reply = await dispatch(actual_tier, messages)
+        tools_used: list[str] = []
 
     # ── Persist to SQLite ──────────────────────────────────────────────────────
     stored_user_content = user_text
@@ -241,6 +247,7 @@ async def send_message(
         model=tier_model(actual_tier),
         tier=actual_tier,
         signals=signals,
+        tools_used=tools_used,
     )
 
 

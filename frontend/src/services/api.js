@@ -7,11 +7,13 @@ export async function sendMessage(
   fileName = null,
   routingMode = null,
   overrideTier = null,
+  toolsEnabled = [],
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
   if (routingMode) body.routing_mode = routingMode;
   if (overrideTier != null) body.override_tier = overrideTier;
+  if (toolsEnabled && toolsEnabled.length > 0) body.tools_enabled = toolsEnabled;
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

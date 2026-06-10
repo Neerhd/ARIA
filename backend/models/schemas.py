@@ -39,6 +39,7 @@ class ChatRequest(BaseModel):
     file_name: Optional[str] = None
     routing_mode: Optional[str] = None   # "auto" | "manual" | "ask"
     override_tier: Optional[int] = None  # explicit tier for manual / post-ask confirmation
+    tools_enabled: list[str] = []        # e.g. ["web_search", "file_reader"]
 
     def effective_message(self) -> str:
         if self.message.strip():
@@ -55,6 +56,7 @@ class ChatResponse(BaseModel):
     model: str
     tier: int = 1
     signals: list[str] = []
+    tools_used: list[str] = []
     permission_required: bool = False
     suggested_tier: Optional[int] = None
     suggested_model: Optional[str] = None

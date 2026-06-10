@@ -22,9 +22,24 @@ export default function App() {
   const [conversationTier, setConversationTier] = useState(1);
   const [pendingRouting, setPendingRouting] = useState(null);
 
+  // Tools state — persisted to localStorage
+  const [toolsEnabled, setToolsEnabled] = useState(
+    () => JSON.parse(localStorage.getItem("aria-tools-enabled") || "[]")
+  );
+
   useEffect(() => {
     localStorage.setItem("aria-routing-mode", routingMode);
   }, [routingMode]);
+
+  useEffect(() => {
+    localStorage.setItem("aria-tools-enabled", JSON.stringify(toolsEnabled));
+  }, [toolsEnabled]);
+
+  const handleToolToggle = (toolName, enabled) => {
+    setToolsEnabled((prev) =>
+      enabled ? [...prev.filter((t) => t !== toolName), toolName] : prev.filter((t) => t !== toolName)
+    );
+  };
 
   const handleModeChange = (mode) => setRoutingMode(mode);
 
@@ -71,7 +86,7 @@ export default function App() {
       const reqMode = overrideTier != null ? "manual" : routingMode;
       const reqTier = overrideTier != null ? overrideTier : (routingMode === "manual" ? conversationTier : undefined);
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier);
+      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, toolsEnabled);
 
       if (!conversationId) setConversationId(data.conversation_id);
 
@@ -107,6 +122,7 @@ export default function App() {
           tier: data.tier,
           model: data.model,
           signals: data.signals,
+          tools_used: data.tools_used || [],
           conversation_id: data.conversation_id,
         },
       ]);
@@ -219,6 +235,7 @@ export default function App() {
             routingMode={routingMode}
             conversationTier={conversationTier}
             onTierChange={setConversationTier}
+            toolsEnabled={toolsEnabled}
           />
         </main>
 
@@ -227,6 +244,8 @@ export default function App() {
           <RouterSettings
             routingMode={routingMode}
             onModeChange={handleModeChange}
+            toolsEnabled={toolsEnabled}
+            onToolToggle={handleToolToggle}
             onClose={() => setSettingsOpen(false)}
           />
         )}
