@@ -8,7 +8,7 @@ const TIER_CONFIG = {
   3: { label: "T3", color: "#f87171", activeColor: "#7f1d1d" },
 };
 
-const TOOL_ICONS = { web_search: "🔍", file_reader: "📂" };
+const TOOL_ICONS = { web_search: "🔍", file_reader: "📂", file_writer: "💾" };
 
 export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, toolsEnabled = [] }) {
   const [text, setText] = useState("");

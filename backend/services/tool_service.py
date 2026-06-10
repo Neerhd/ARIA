@@ -31,6 +31,31 @@ _TOOL_DEFS = {
             },
         },
     },
+    "file_writer": {
+        "type": "function",
+        "function": {
+            "name": "file_writer",
+            "description": (
+                "Write text content to a local file at a given absolute path. "
+                "Creates the file and any missing parent directories automatically. "
+                "Use this when the user asks you to save, create, write, or export a file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path where the file should be written (e.g. /Users/alice/Desktop/notes.txt).",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The full text content to write into the file.",
+                    },
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
     "web_search": {
         "type": "function",
         "function": {
@@ -95,10 +120,26 @@ async def _exec_web_search(args: dict) -> str:
     return "\n\n".join(lines)
 
 
+async def _exec_file_writer(args: dict) -> str:
+    path_str = args.get("path", "").strip()
+    content = args.get("content", "")
+    if not path_str:
+        return "Error: no path provided."
+    p = Path(path_str).expanduser()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return f"File written successfully: {p} ({len(content):,} characters)"
+    except Exception as e:
+        return f"Error writing file: {e}"
+
+
 async def execute_tool(name: str, args: dict) -> str:
     """Dispatch a tool call by name and return its string result."""
     if name == "file_reader":
         return await _exec_file_reader(args)
+    if name == "file_writer":
+        return await _exec_file_writer(args)
     if name == "web_search":
         return await _exec_web_search(args)
     return f"Unknown tool: {name}"

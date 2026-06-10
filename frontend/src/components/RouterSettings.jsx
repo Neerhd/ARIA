@@ -28,6 +28,13 @@ const TOOLS = [
     desc: "ARIA can read any local file by path during the conversation.",
     note: "Works on all tiers — no upgrade required",
   },
+  {
+    key: "file_writer",
+    label: "File Writer",
+    icon: "💾",
+    desc: "ARIA can create and write files to any local path (e.g. save a report to your Desktop).",
+    note: "Works on all tiers — creates missing directories automatically",
+  },
 ];
 
 export default function RouterSettings({ routingMode, onModeChange, toolsEnabled, onToolToggle, onClose }) {
