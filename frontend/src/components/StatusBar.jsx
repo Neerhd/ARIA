@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { checkHealth } from "../services/api";
+import { Badge } from "@/components/ui/badge";
 
 export default function StatusBar() {
   const [health, setHealth] = useState(null);
@@ -13,22 +14,18 @@ export default function StatusBar() {
   if (!health) return null;
 
   const dot = (ok) => (
-    <span style={{ color: ok ? "#4ade80" : "#f87171", marginRight: 4 }}>●</span>
+    <span className={ok ? "text-green-500" : "text-red-400"}>●</span>
   );
 
   return (
-    <div style={{
-      display: "flex", gap: 16, padding: "6px 16px",
-      background: "#1a1a24", borderBottom: "1px solid #2a2a3a",
-      fontSize: 11, color: "#888", alignItems: "center",
-    }}>
-      <span style={{ color: health.status === "ok" ? "#4ade80" : "#fbbf24", fontWeight: 600 }}>
+    <div className="flex items-center gap-4 border-b border-border bg-muted px-4 py-1.5 text-[11px] text-muted-foreground">
+      <span className={`font-semibold ${health.status === "ok" ? "text-green-500" : "text-amber-400"}`}>
         ARIA {health.status === "ok" ? "ONLINE" : "DEGRADED"}
       </span>
-      <span>{dot(health.ollama)} Ollama ({health.model})</span>
-      <span>{dot(health.sqlite)} SQLite</span>
-      <span>{dot(health.chroma)} ChromaDB</span>
-      <span>{dot(health.neo4j)} Neo4j</span>
+      <Badge variant="outline" className="gap-1.5">{dot(health.ollama)} Ollama ({health.model})</Badge>
+      <Badge variant="outline" className="gap-1.5">{dot(health.sqlite)} SQLite</Badge>
+      <Badge variant="outline" className="gap-1.5">{dot(health.chroma)} ChromaDB</Badge>
+      <Badge variant="outline" className="gap-1.5">{dot(health.neo4j)} Neo4j</Badge>
     </div>
   );
 }

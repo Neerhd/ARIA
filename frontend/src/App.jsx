@@ -5,6 +5,8 @@ import MessageList from "./components/MessageList";
 import InputBar from "./components/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { sendMessage, fetchMessages, uploadFile } from "./services/api";
 
 export default function App() {
@@ -163,71 +165,49 @@ export default function App() {
     await _doSend(text, fileContent, fileName, truncated, overrideTier, pendingConvoId);
   };
 
-  const overlayOpen = memoryOpen || settingsOpen;
-
   return (
-    <div style={{
-      height: "100vh", display: "flex", flexDirection: "column",
-      background: "#0f0f14", color: "#e2e8f0",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    }}>
-      <header style={{
-        padding: "14px 20px", background: "#13131e",
-        borderBottom: "1px solid #2a2a3a", display: "flex", alignItems: "center", gap: 12,
-      }}>
-        <div style={{
-          width: 32, height: 32, background: "linear-gradient(135deg,#7c3aed,#2563eb)",
-          borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-          fontWeight: 800, fontSize: 14, color: "#fff",
-        }}>A</div>
-        <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: 1 }}>ARIA</span>
-        <span style={{ color: "#4a5568", fontSize: 12, marginLeft: 4 }}>
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <header className="flex items-center gap-3 border-b border-border bg-card px-5 py-3.5">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 text-sm font-extrabold text-white">
+          A
+        </div>
+        <span className="text-lg font-bold tracking-wide">ARIA</span>
+        <span className="ml-1 text-xs text-muted-foreground">
           Adaptive Reasoning Intelligence Assistant
         </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button
+        <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
             onClick={() => { setMemoryOpen((v) => !v); setSettingsOpen(false); }}
-            style={{
-              padding: "6px 14px", background: memoryOpen ? "#7c3aed22" : "none",
-              border: `1px solid ${memoryOpen ? "#7c3aed" : "#2a2a3a"}`,
-              borderRadius: 8, cursor: "pointer", fontSize: 13,
-              color: memoryOpen ? "#a78bfa" : "#6b7280",
-            }}
+            className={memoryOpen ? "border-violet-600 bg-violet-600/10 text-violet-300" : ""}
           >
             🧠 Memory
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
-            style={{
-              padding: "6px 14px", background: settingsOpen ? "#7c3aed22" : "none",
-              border: `1px solid ${settingsOpen ? "#7c3aed" : "#2a2a3a"}`,
-              borderRadius: 8, cursor: "pointer", fontSize: 13,
-              color: settingsOpen ? "#a78bfa" : "#6b7280",
-            }}
+            className={settingsOpen ? "border-violet-600 bg-violet-600/10 text-violet-300" : ""}
           >
             ⚙ Settings
-          </button>
+          </Button>
         </div>
       </header>
 
       <StatusBar />
 
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+      <div className="relative flex flex-1 overflow-hidden">
         <Sidebar activeId={conversationId} onSelect={loadConversation} onNew={handleNewChat} />
 
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <main className="flex flex-1 flex-col overflow-hidden">
           <MessageList
             messages={messages}
             loading={loading}
             onRoutingDecision={handleRoutingDecision}
           />
           {error && (
-            <div style={{
-              margin: "0 20px 8px", padding: "10px 14px", background: "#2d1b1b",
-              borderRadius: 8, color: "#f87171", fontSize: 13,
-            }}>
-              {error}
-            </div>
+            <Alert variant="destructive" className="mx-5 mb-2">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           <InputBar
             onSend={handleSend}
