@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { Badge } from "@/components/ui/badge";
 
 const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt";
 
@@ -45,15 +46,11 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
     <div style={{ borderTop: "1px solid #2a2a3a", background: "#13131e" }}>
       {/* Active tool pills */}
       {toolsEnabled.length > 0 && (
-        <div style={{ padding: "6px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div className="flex flex-wrap gap-1.5 px-5 pt-1.5">
           {toolsEnabled.map((t) => (
-            <span key={t} style={{
-              display: "inline-flex", alignItems: "center", gap: 4,
-              background: "#1e1e2e", border: "1px solid #3730a3",
-              borderRadius: 6, padding: "2px 8px", fontSize: 11, color: "#818cf8",
-            }}>
+            <Badge key={t} variant="secondary">
               {TOOL_ICONS[t] || "🔧"} {t.replace("_", " ")}
-            </span>
+            </Badge>
           ))}
         </div>
       )}

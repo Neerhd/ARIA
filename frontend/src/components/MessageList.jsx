@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import ModelBadge from "./ModelBadge";
 import RoutingPrompt from "./RoutingPrompt";
+import { Badge } from "@/components/ui/badge";
 
 export default function MessageList({ messages, loading, onRoutingDecision }) {
   const bottomRef = useRef(null);
@@ -62,14 +63,11 @@ export default function MessageList({ messages, loading, onRoutingDecision }) {
               {m.role === "assistant" && m.tier && (
                 <div>
                   {m.tools_used && m.tools_used.length > 0 && (
-                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6, marginBottom: 2 }}>
+                    <div className="mt-1.5 mb-0.5 flex flex-wrap gap-1">
                       {[...new Set(m.tools_used)].map((t) => (
-                        <span key={t} style={{
-                          fontSize: 10, padding: "1px 6px", borderRadius: 4,
-                          background: "#1a1a2e", border: "1px solid #3730a3", color: "#818cf8",
-                        }}>
+                        <Badge key={t} variant="secondary">
                           {t === "web_search" ? "🔍 web search" : t === "file_reader" ? "📂 file reader" : t}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   )}
