@@ -240,15 +240,14 @@ export default function App() {
         </main>
 
         {memoryOpen && <MemoryBrowser onClose={() => setMemoryOpen(false)} />}
-        {settingsOpen && (
-          <RouterSettings
-            routingMode={routingMode}
-            onModeChange={handleModeChange}
-            toolsEnabled={toolsEnabled}
-            onToolToggle={handleToolToggle}
-            onClose={() => setSettingsOpen(false)}
-          />
-        )}
+        <RouterSettings
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          routingMode={routingMode}
+          onModeChange={handleModeChange}
+          toolsEnabled={toolsEnabled}
+          onToolToggle={handleToolToggle}
+        />
       </div>
     </div>
   );
