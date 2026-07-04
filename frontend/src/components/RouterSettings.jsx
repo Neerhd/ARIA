@@ -16,8 +16,8 @@ export default function RouterSettings({
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
-    fetchRouterConfig().then(setConfig).catch(() => {});
-  }, []);
+    if (open) fetchRouterConfig().then(setConfig).catch(() => {});
+  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
