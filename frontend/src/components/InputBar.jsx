@@ -1,13 +1,11 @@
 import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt";
 
-const TIER_CONFIG = {
-  1: { label: "T1", color: "#4ade80", activeColor: "#166534" },
-  2: { label: "T2", color: "#818cf8", activeColor: "#3730a3" },
-  3: { label: "T3", color: "#f87171", activeColor: "#7f1d1d" },
-};
+const TIER_VARIANTS = { 1: "tier1", 2: "tier2", 3: "tier3" };
 
 const TOOL_ICONS = { web_search: "🔍", file_reader: "📂", file_writer: "💾" };
 
@@ -43,7 +41,7 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
   const canSend = !disabled && (text.trim() || file);
 
   return (
-    <div style={{ borderTop: "1px solid #2a2a3a", background: "#13131e" }}>
+    <div className="border-t border-border bg-card">
       {/* Active tool pills */}
       {toolsEnabled.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-5 pt-1.5">
@@ -57,61 +55,49 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
 
       {/* File attachment chip */}
       {file && (
-        <div style={{ padding: "6px 20px 0", display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: "#1e1e2e", border: "1px solid #7c3aed",
-            borderRadius: 6, padding: "4px 10px", fontSize: 12, color: "#a78bfa",
-          }}>
+        <div className="flex items-center gap-2 px-5 pt-1.5">
+          <Badge variant="outline" className="gap-1.5 border-violet-600 text-violet-300">
             <span>📎</span>
-            <span style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span className="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
               {file.name}
             </span>
             <button
               type="button"
               onClick={removeFile}
-              style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 14 }}
+              className="cursor-pointer border-none bg-transparent p-0 text-sm leading-none text-muted-foreground"
             >
               ×
             </button>
-          </div>
+          </Badge>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ padding: "10px 20px 12px", display: "flex", gap: 8, alignItems: "flex-end" }}>
+      <form onSubmit={handleSubmit} className="flex items-end gap-2 px-5 pt-2.5 pb-3">
         {/* Hidden file input */}
         <input
           ref={fileRef}
           type="file"
           accept={ACCEPTED}
           onChange={handleFileChange}
-          style={{ display: "none" }}
+          className="hidden"
         />
 
         {/* Manual tier selector */}
         {routingMode === "manual" && (
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <div className="flex shrink-0 gap-1">
             {[1, 2, 3].map((t) => {
-              const tc = TIER_CONFIG[t];
               const active = conversationTier === t;
               return (
-                <button
+                <Badge
                   key={t}
-                  type="button"
+                  variant={active ? TIER_VARIANTS[t] : "outline"}
+                  render={<button type="button" disabled={disabled} />}
                   onClick={() => onTierChange(t)}
-                  disabled={disabled}
                   title={`Use Tier ${t}`}
-                  style={{
-                    padding: "6px 8px", borderRadius: 7, fontSize: 11, fontWeight: 700,
-                    cursor: disabled ? "default" : "pointer",
-                    border: `1px solid ${active ? tc.activeColor : "#2a2a3a"}`,
-                    background: active ? `${tc.color}22` : "transparent",
-                    color: active ? tc.color : "#4a5568",
-                    lineHeight: 1,
-                  }}
+                  className="cursor-pointer font-bold"
                 >
-                  {tc.label}
-                </button>
+                  T{t}
+                </Badge>
               );
             })}
           </div>
@@ -119,59 +105,41 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
 
         {/* Auto/ask mode tier indicator */}
         {routingMode !== "manual" && conversationTier > 1 && (
-          <div style={{
-            display: "flex", alignItems: "center", flexShrink: 0,
-            fontSize: 10, color: "#818cf8", background: "#1a1a2e",
-            border: "1px solid #3730a3", borderRadius: 6, padding: "4px 8px",
-          }}>
+          <Badge variant={TIER_VARIANTS[conversationTier]} className="shrink-0">
             T{conversationTier}
-          </div>
+          </Badge>
         )}
 
         {/* Paperclip button */}
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           onClick={() => fileRef.current?.click()}
           disabled={disabled}
           title="Attach a file"
-          style={{
-            padding: "9px 10px", background: "none", border: "1px solid #2a2a3a",
-            borderRadius: 10, cursor: disabled ? "default" : "pointer",
-            color: file ? "#7c3aed" : "#6b7280", fontSize: 16, lineHeight: 1,
-            flexShrink: 0,
-          }}
+          className={`shrink-0 ${file ? "text-violet-400" : ""}`}
         >
           📎
-        </button>
+        </Button>
 
-        <textarea
+        <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={file ? "Add a question about the file, or send as-is…" : "Message ARIA… (Enter to send, Shift+Enter for new line)"}
           disabled={disabled}
           rows={1}
-          style={{
-            flex: 1, background: "#1e1e2e", border: "1px solid #2a2a3a",
-            borderRadius: 10, padding: "10px 14px", color: "#e2e8f0",
-            fontSize: 14, resize: "none", outline: "none",
-            fontFamily: "inherit", lineHeight: 1.5,
-          }}
+          className="min-h-0 flex-1 resize-none"
         />
 
-        <button
+        <Button
           type="submit"
           disabled={!canSend}
-          style={{
-            padding: "10px 20px",
-            background: canSend ? "#7c3aed" : "#4a4a6a",
-            color: "#fff", border: "none", borderRadius: 10,
-            cursor: canSend ? "pointer" : "default",
-            fontSize: 14, fontWeight: 600, flexShrink: 0,
-          }}
+          className="shrink-0 bg-violet-600 text-white hover:bg-violet-700"
         >
           Send
-        </button>
+        </Button>
       </form>
     </div>
   );
