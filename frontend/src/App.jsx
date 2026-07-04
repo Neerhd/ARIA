@@ -239,7 +239,7 @@ export default function App() {
           />
         </main>
 
-        {memoryOpen && <MemoryBrowser onClose={() => setMemoryOpen(false)} />}
+        <MemoryBrowser open={memoryOpen} onOpenChange={setMemoryOpen} />
         <RouterSettings
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
