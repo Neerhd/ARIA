@@ -1,3 +1,7 @@
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
 const SIGNAL_ICONS = {
   "file attached": "📎",
   "long conversation (15+ messages)": "💬",
@@ -11,68 +15,42 @@ export default function RoutingPrompt({ data, onConfirm, onDecline }) {
   const shortModel = (suggested_model || "").split(":")[0];
 
   return (
-    <div style={{ display: "flex", justifyContent: "flex-start" }}>
-      <div style={{
-        maxWidth: "72%", borderRadius: 12, overflow: "hidden",
-        border: "1px solid #3730a3", background: "#1a1a2e",
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: "10px 14px 8px",
-          borderBottom: "1px solid #2a2a4a",
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <span style={{ fontSize: 14 }}>⚡</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#818cf8" }}>
+    <div className="flex justify-start">
+      <Card className="max-w-[72%]">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xs text-indigo-400">
+            <span className="text-sm">⚡</span>
             Tier {suggested_tier} recommended
-          </span>
-        </div>
+          </CardTitle>
+        </CardHeader>
 
-        {/* Body */}
-        <div style={{ padding: "10px 14px" }}>
-          <p style={{ fontSize: 13, color: "#cbd5e1", margin: "0 0 8px", lineHeight: 1.5 }}>
+        <CardContent className="space-y-3">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             This task would benefit from{" "}
-            <strong style={{ color: "#818cf8" }}>{shortModel}</strong>{" "}
+            <strong className="text-indigo-400">{shortModel}</strong>{" "}
             (Tier {suggested_tier}).
           </p>
 
           {signals.length > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            <div className="flex flex-wrap gap-1.5">
               {signals.map((s) => (
-                <span key={s} style={{
-                  background: "#0f172a", border: "1px solid #334155",
-                  borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#94a3b8",
-                }}>
+                <Badge key={s} variant="secondary">
                   {SIGNAL_ICONS[s] || "•"} {s}
-                </span>
+                </Badge>
               ))}
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={onConfirm}
-              style={{
-                flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
-                background: "#3730a3", color: "#e0e7ff",
-                fontSize: 13, fontWeight: 600, cursor: "pointer",
-              }}
-            >
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={onConfirm}>
               Use {shortModel}
-            </button>
-            <button
-              onClick={onDecline}
-              style={{
-                flex: 1, padding: "8px 0", borderRadius: 8,
-                border: "1px solid #334155", background: "transparent",
-                color: "#94a3b8", fontSize: 13, cursor: "pointer",
-              }}
-            >
+            </Button>
+            <Button className="flex-1" variant="outline" onClick={onDecline}>
               Keep Tier 1
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
