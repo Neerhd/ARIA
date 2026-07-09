@@ -3,7 +3,10 @@ import httpx
 import uuid
 import logging
 from datetime import datetime, timezone
+from sqlalchemy import select
 from config import settings
+from database.sqlite import AsyncSessionLocal
+from models.schemas import Project
 from services.graph_service import get_clusters_for_consolidation, store_reflection
 
 logger = logging.getLogger(__name__)
@@ -54,7 +57,12 @@ async def synthesise_reflection(concept: str, episodes: list[dict]) -> str | Non
 
 
 async def run_consolidation(triggered_by: str = "manual") -> dict:
-    """Run the full consolidation pipeline. Returns a result summary dict."""
+    """Run the full consolidation pipeline, per project. Returns a result summary dict.
+
+    Clustering is scoped to each project independently so patterns synthesise
+    per-project, not globally — a concept shared across projects clusters
+    separately within each one.
+    """
     results: dict = {
         "triggered_by": triggered_by,
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -64,11 +72,21 @@ async def run_consolidation(triggered_by: str = "manual") -> dict:
         "errors": [],
     }
 
-    clusters = await get_clusters_for_consolidation(min_episodes=3)
-    results["clusters_found"] = len(clusters)
-    logger.info(f"Consolidation: {len(clusters)} cluster(s) found.")
+    async with AsyncSessionLocal() as db:
+        project_rows = await db.execute(select(Project.id))
+        project_ids = [row[0] for row in project_rows.all()]
 
-    for cluster in clusters:
+    all_clusters = []
+    for project_id in project_ids:
+        clusters = await get_clusters_for_consolidation(project_id, min_episodes=3)
+        for cluster in clusters:
+            cluster["project_id"] = project_id
+        all_clusters.extend(clusters)
+
+    results["clusters_found"] = len(all_clusters)
+    logger.info(f"Consolidation: {len(all_clusters)} cluster(s) found across {len(project_ids)} project(s).")
+
+    for cluster in all_clusters:
         concept = cluster["concept"]
         episodes = cluster["episodes"][:6]  # cap at 6 episodes per reflection
         try:

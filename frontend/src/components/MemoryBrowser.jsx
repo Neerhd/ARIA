@@ -1,3 +1,4 @@
+import { Brain } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useMemoryBrowser } from "@/hooks/useMemoryBrowser";
@@ -8,20 +9,22 @@ import ReflectionsTab from "./memory/ReflectionsTab";
 
 const TABS = ["pinned", "episodes", "concepts", "reflections"];
 
-export default function MemoryBrowser({ open, onOpenChange }) {
+export default function MemoryBrowser({ open, onOpenChange, projectId }) {
   const {
     tab, setTab,
     episodes, concepts, stats, reflections, pinnedFacts,
     activeConcept, loading, running, runResult,
     visibleEpisodes,
     handleConceptClick, handleRunConsolidation, handleDeleteFact,
-  } = useMemoryBrowser(open);
+  } = useMemoryBrowser(open, projectId);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[420px] sm:max-w-[420px]">
         <SheetHeader>
-          <SheetTitle>🧠 Memory</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            <Brain className="size-4" /> Memory
+          </SheetTitle>
           {stats && (
             <p className="text-[11px] text-muted-foreground">
               {stats.episodes ?? 0} episodes · {stats.concepts ?? 0} concepts · {stats.reflections ?? 0} reflections · {stats.facts ?? 0} pinned

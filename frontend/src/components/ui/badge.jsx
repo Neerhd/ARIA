@@ -22,7 +22,7 @@ const badgeVariants = cva(
         tier1:
           "bg-green-500/10 text-green-500 dark:bg-green-500/20 [a]:hover:bg-green-500/20",
         tier2:
-          "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 [a]:hover:bg-indigo-500/20",
+          "bg-foreground/10 text-foreground dark:bg-foreground/20 [a]:hover:bg-foreground/20",
         tier3:
           "bg-red-500/10 text-red-500 dark:bg-red-500/20 [a]:hover:bg-red-500/20",
       },

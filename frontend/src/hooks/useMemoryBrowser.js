@@ -5,7 +5,7 @@ import {
   fetchPinnedFacts, deletePinnedFact,
 } from "../services/api";
 
-export function useMemoryBrowser(open) {
+export function useMemoryBrowser(open, projectId) {
   const [tab, setTab] = useState("pinned");
   const [episodes, setEpisodes] = useState([]);
   const [concepts, setConcepts] = useState([]);
@@ -18,12 +18,13 @@ export function useMemoryBrowser(open) {
   const [runResult, setRunResult] = useState(null);
 
   const loadAll = useCallback(() => {
+    if (!projectId) return;
     setLoading(true);
     Promise.all([
-      fetchMemoryEpisodes(30),
-      fetchMemoryConcepts(50),
-      fetchMemoryStats(),
-      fetchReflections(20),
+      fetchMemoryEpisodes(projectId, 30),
+      fetchMemoryConcepts(projectId, 50),
+      fetchMemoryStats(projectId),
+      fetchReflections(projectId, 20),
       fetchPinnedFacts(),
     ]).then(([eps, cons, st, refs, pins]) => {
       setEpisodes(eps);
@@ -32,9 +33,9 @@ export function useMemoryBrowser(open) {
       setReflections(refs);
       setPinnedFacts(pins);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [projectId]);
 
-  useEffect(() => { if (open) loadAll(); }, [open, loadAll]);
+  useEffect(() => { if (open) loadAll(); }, [open, projectId, loadAll]);
 
   const handleConceptClick = (name) => {
     setActiveConcept((prev) => (prev === name ? null : name));
@@ -54,8 +55,8 @@ export function useMemoryBrowser(open) {
             ? "Not enough data yet — need 3+ episodes per concept."
             : `Found ${result.clusters_found} cluster(s) but model returned no usable reflections.`,
       });
-      await fetchReflections(20).then(setReflections);
-      await fetchMemoryStats().then(setStats);
+      await fetchReflections(projectId, 20).then(setReflections);
+      await fetchMemoryStats(projectId).then(setStats);
     } catch (e) {
       setRunResult({ ok: false, message: e.message });
     } finally {

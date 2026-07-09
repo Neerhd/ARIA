@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pin, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/time";
@@ -21,7 +22,7 @@ export default function PinnedFactCard({ fact, onDelete }) {
   return (
     <Card>
       <CardContent className="flex items-start gap-2.5">
-        <span className="mt-px shrink-0 text-base">📌</span>
+        <Pin className="mt-px size-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="m-0 text-[13px] leading-relaxed break-words text-foreground">
             {fact.text}
@@ -38,7 +39,7 @@ export default function PinnedFactCard({ fact, onDelete }) {
           title={confirming ? "Click again to confirm" : "Remove pinned fact"}
           className="shrink-0"
         >
-          {deleting ? "…" : confirming ? "Confirm" : "×"}
+          {deleting ? "…" : confirming ? "Confirm" : <X className="size-3.5" />}
         </Button>
       </CardContent>
     </Card>

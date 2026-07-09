@@ -19,7 +19,8 @@ export default function ConceptsTab({ concepts, activeConcept, onConceptClick })
           <TopicChip
             key={c.name}
             name={c.name}
-            count={c.episode_count}
+            projectCount={c.project_episode_count}
+            totalCount={c.episode_count}
             onClick={onConceptClick}
             active={activeConcept === c.name}
           />

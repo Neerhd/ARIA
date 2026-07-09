@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Settings } from "lucide-react";
 import { fetchRouterConfig } from "../services/api";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import RoutingModeSection from "./settings/RoutingModeSection";
@@ -23,7 +24,9 @@ export default function RouterSettings({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[340px] sm:max-w-[340px]">
         <SheetHeader>
-          <SheetTitle>⚙ Settings</SheetTitle>
+          <SheetTitle className="flex items-center gap-2">
+            <Settings className="size-4" /> Settings
+          </SheetTitle>
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4">

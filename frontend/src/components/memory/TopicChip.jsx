@@ -1,6 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 
-export default function TopicChip({ name, count, onClick, active }) {
+export default function TopicChip({ name, count, projectCount, totalCount, onClick, active }) {
+  const label = projectCount != null && totalCount != null
+    ? `${projectCount}/${totalCount}`
+    : count;
+
   return (
     <Badge
       variant={active ? "tier2" : "outline"}
@@ -9,8 +13,13 @@ export default function TopicChip({ name, count, onClick, active }) {
       className="cursor-pointer rounded-full"
     >
       {name}
-      {count != null && (
-        <span className="rounded-full bg-muted px-1.5 text-[10px]">{count}</span>
+      {label != null && (
+        <span
+          className="rounded-full bg-muted px-1.5 font-mono text-[10px] tabular-nums"
+          title={projectCount != null ? "episodes in this project / total across all projects" : undefined}
+        >
+          {label}
+        </span>
       )}
     </Badge>
   );

@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.schemas import (
     ChatRequest, ChatResponse, ConversationOut, MessageOut,
-    Conversation, Message, RoutingLog,
+    Conversation, Message, RoutingLog, Project,
 )
 from database.sqlite import get_db
 from services.ollama_service import check_ollama_alive
@@ -12,6 +12,7 @@ from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
     store_fact, get_pinned_facts,
 )
+from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
 from services.router_service import classify_action, dispatch, tier_model
 from services.tool_service import run_agentic_loop
@@ -53,10 +54,20 @@ def _extract_fact(text: str) -> str | None:
     return fact if len(fact) >= 3 else None
 
 
+async def _resolve_project_id(db: AsyncSession, project_id: str | None) -> str:
+    """Return project_id if it names a real project, else the Default project's id."""
+    if project_id:
+        result = await db.execute(select(Project).where(Project.id == project_id))
+        if result.scalar_one_or_none():
+            return project_id
+        raise HTTPException(404, f"Project {project_id} not found")
+    return await get_or_create_default_project(db)
+
+
 # ─── Background episodic memory pipeline ──────────────────────────────────────
 
-async def _store_episode_memory(episode_id, conversation_id, prompt, response):
-    ok = await store_episode(episode_id, conversation_id, prompt, response)
+async def _store_episode_memory(episode_id, conversation_id, prompt, response, project_id):
+    ok = await store_episode(episode_id, conversation_id, prompt, response, project_id)
     if not ok:
         return
     await link_to_previous(episode_id, conversation_id)
@@ -82,6 +93,9 @@ async def send_message(
     routing_mode = req.routing_mode or "auto"
 
     # ── Create or load conversation ────────────────────────────────────────────
+    # A new conversation's project_id comes from the request, falling back to the
+    # Default project if omitted. An existing conversation keeps the project_id
+    # it was created with — a later, mismatched req.project_id never re-scopes it.
     if req.conversation_id:
         result = await db.execute(
             select(Conversation).where(Conversation.id == req.conversation_id)
@@ -90,12 +104,14 @@ async def send_message(
         if not convo:
             # Pre-generated ID from a permission_required flow — create it now
             title = req.file_name or user_text[:60]
-            convo = Conversation(id=req.conversation_id, title=title)
+            project_id = await _resolve_project_id(db, req.project_id)
+            convo = Conversation(id=req.conversation_id, title=title, project_id=project_id)
             db.add(convo)
             await db.flush()
     else:
         title = req.file_name or user_text[:60]
-        convo = Conversation(id=str(uuid.uuid4()), title=title)
+        project_id = await _resolve_project_id(db, req.project_id)
+        convo = Conversation(id=str(uuid.uuid4()), title=title, project_id=project_id)
         db.add(convo)
         await db.flush()
 
@@ -147,7 +163,7 @@ async def send_message(
         logger.info(f"Pinning new fact: {new_fact_text[:80]}")
 
     # ── Retrieve relevant memories (ChromaDB) + reinforce in Neo4j ────────────
-    memories = search_memory(user_text, n_results=3)
+    memories = search_memory(user_text, convo.project_id, n_results=3)
     recalled_ids = [m["id"] for m in memories if m.get("id")]
     if recalled_ids:
         background_tasks.add_task(reinforce, recalled_ids)
@@ -260,7 +276,7 @@ async def send_message(
     # ── Store in ChromaDB ──────────────────────────────────────────────────────
     store_memory(
         f"User: {stored_user_content}\nARIA: {reply}",
-        {"conversation_id": convo.id, "type": "exchange"},
+        {"conversation_id": convo.id, "project_id": convo.project_id, "type": "exchange"},
         entry_id=episode_id,
     )
 
@@ -271,6 +287,7 @@ async def send_message(
         convo.id,
         stored_user_content,
         reply,
+        convo.project_id,
     )
 
     return ChatResponse(
@@ -287,10 +304,11 @@ async def send_message(
 # ─── Conversation list / history ──────────────────────────────────────────────
 
 @router.get("/conversations", response_model=list[ConversationOut])
-async def list_conversations(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Conversation).order_by(Conversation.updated_at.desc()).limit(50)
-    )
+async def list_conversations(project_id: str | None = None, db: AsyncSession = Depends(get_db)):
+    query = select(Conversation).order_by(Conversation.updated_at.desc()).limit(50)
+    if project_id:
+        query = query.where(Conversation.project_id == project_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 

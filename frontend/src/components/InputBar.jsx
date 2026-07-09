@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { Paperclip, Search, FolderOpen, Save, Wrench, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,7 +8,7 @@ const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yam
 
 const TIER_VARIANTS = { 1: "tier1", 2: "tier2", 3: "tier3" };
 
-const TOOL_ICONS = { web_search: "🔍", file_reader: "📂", file_writer: "💾" };
+const TOOL_ICONS = { web_search: Search, file_reader: FolderOpen, file_writer: Save };
 
 export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, toolsEnabled = [] }) {
   const [text, setText] = useState("");
@@ -45,28 +46,31 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
       {/* Active tool pills */}
       {toolsEnabled.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-5 pt-1.5">
-          {toolsEnabled.map((t) => (
-            <Badge key={t} variant="secondary">
-              {TOOL_ICONS[t] || "🔧"} {t.replace("_", " ")}
-            </Badge>
-          ))}
+          {toolsEnabled.map((t) => {
+            const Icon = TOOL_ICONS[t] || Wrench;
+            return (
+              <Badge key={t} variant="secondary">
+                <Icon /> {t.replace("_", " ")}
+              </Badge>
+            );
+          })}
         </div>
       )}
 
       {/* File attachment chip */}
       {file && (
         <div className="flex items-center gap-2 px-5 pt-1.5">
-          <Badge variant="outline" className="gap-1.5 border-violet-600 text-violet-300">
-            <span>📎</span>
+          <Badge variant="outline" className="gap-1.5 border-primary text-primary">
+            <Paperclip />
             <span className="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
               {file.name}
             </span>
             <button
               type="button"
               onClick={removeFile}
-              className="cursor-pointer border-none bg-transparent p-0 text-sm leading-none text-muted-foreground"
+              className="cursor-pointer border-none bg-transparent p-0 leading-none text-muted-foreground"
             >
-              ×
+              <X className="size-3" />
             </button>
           </Badge>
         </div>
@@ -118,9 +122,9 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
           onClick={() => fileRef.current?.click()}
           disabled={disabled}
           title="Attach a file"
-          className={`shrink-0 ${file ? "text-violet-400" : ""}`}
+          className={`shrink-0 ${file ? "text-primary" : ""}`}
         >
-          📎
+          <Paperclip />
         </Button>
 
         <Textarea
@@ -133,11 +137,7 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
           className="min-h-0 flex-1 resize-none"
         />
 
-        <Button
-          type="submit"
-          disabled={!canSend}
-          className="shrink-0 bg-violet-600 text-white hover:bg-violet-700"
-        >
+        <Button type="submit" disabled={!canSend} className="shrink-0">
           Send
         </Button>
       </form>

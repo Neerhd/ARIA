@@ -13,7 +13,7 @@ export default function ModelBadge({ tier, model, signals }) {
       title={signals?.length ? `Signals: ${signals.join(", ")}` : `Tier ${tier}`}
       className="mt-1.5 font-normal"
     >
-      <span className="font-bold">{TIER_LABELS[tier]}</span>
+      <span className="font-mono font-bold tabular-nums">{TIER_LABELS[tier]}</span>
       <span className="opacity-70">·</span>
       <span>{shortModel}</span>
     </Badge>

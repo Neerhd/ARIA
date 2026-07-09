@@ -109,6 +109,6 @@ async def list_runs(limit: int = 10, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/reflections")
-async def list_reflections(limit: int = 20):
-    """List all synthesised Reflection nodes from the knowledge graph."""
-    return await get_reflections(limit=min(limit, 50))
+async def list_reflections(project_id: str, limit: int = 20):
+    """List synthesised Reflection nodes from the knowledge graph, scoped to a project."""
+    return await get_reflections(project_id, limit=min(limit, 50))

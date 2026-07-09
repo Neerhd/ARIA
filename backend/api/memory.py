@@ -8,18 +8,18 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 
 
 @router.get("/episodes")
-async def episodes(limit: int = 20):
-    return await get_recent_episodes(limit=min(limit, 50))
+async def episodes(project_id: str, limit: int = 20):
+    return await get_recent_episodes(project_id, limit=min(limit, 50))
 
 
 @router.get("/concepts")
-async def concepts(limit: int = 40):
-    return await get_top_concepts(limit=min(limit, 100))
+async def concepts(project_id: str, limit: int = 40):
+    return await get_top_concepts(project_id, limit=min(limit, 100))
 
 
 @router.get("/stats")
-async def stats():
-    return await get_graph_stats()
+async def stats(project_id: str):
+    return await get_graph_stats(project_id)
 
 
 @router.get("/pinned")

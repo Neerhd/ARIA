@@ -21,8 +21,9 @@ def store_memory(text: str, metadata: dict, entry_id: str | None = None) -> str:
     return eid
 
 
-def search_memory(query: str, n_results: int = 5) -> list[dict]:
-    """Return the top-n semantically similar memory entries for a query.
+def search_memory(query: str, project_id: str, n_results: int = 5) -> list[dict]:
+    """Return the top-n semantically similar memory entries for a query,
+    scoped to a single project so recall never crosses project boundaries.
 
     Each result includes an 'id' field so callers can reinforce the
     matching Neo4j Episode nodes.
@@ -32,6 +33,7 @@ def search_memory(query: str, n_results: int = 5) -> list[dict]:
         results = collection.query(
             query_texts=[query],
             n_results=n_results,
+            where={"project_id": project_id},
             include=["documents", "metadatas", "distances"],
         )
         items = []
@@ -46,3 +48,17 @@ def search_memory(query: str, n_results: int = 5) -> list[dict]:
     except Exception as e:
         logger.warning(f"Memory search failed: {e}")
         return []
+
+
+def delete_memory_by_project(project_id: str) -> int:
+    """Delete all ChromaDB entries belonging to a project. Returns count deleted."""
+    collection = get_or_create_collection()
+    try:
+        matches = collection.get(where={"project_id": project_id}, include=[])
+        ids = matches["ids"]
+        if ids:
+            collection.delete(ids=ids)
+        return len(ids)
+    except Exception as e:
+        logger.warning(f"delete_memory_by_project failed: {e}")
+        return 0

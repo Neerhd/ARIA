@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ReflectionCard from "./ReflectionCard";
@@ -12,7 +13,7 @@ export default function ReflectionsTab({ reflections, running, runResult, onRunC
           onClick={onRunConsolidation}
           disabled={running}
         >
-          {running ? "Running consolidation…" : "▶ Run Consolidation Now"}
+          {running ? "Running consolidation…" : <><Play /> Run Consolidation Now</>}
         </Button>
 
         {runResult && (

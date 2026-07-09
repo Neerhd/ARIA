@@ -5,9 +5,11 @@ import MessageList from "./components/MessageList";
 import InputBar from "./components/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
+import ProjectSwitcher from "./components/ProjectSwitcher";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { sendMessage, fetchMessages, uploadFile } from "./services/api";
+import { Moon, Sun, Brain, Settings, FolderKanban } from "lucide-react";
+import { sendMessage, fetchMessages, uploadFile, fetchProjects } from "./services/api";
 
 export default function App() {
   const [conversationId, setConversationId] = useState(null);
@@ -16,6 +18,41 @@ export default function App() {
   const [error, setError] = useState(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
+
+  // Projects — active project persisted to localStorage
+  const [projects, setProjects] = useState([]);
+  const [activeProjectId, setActiveProjectId] = useState(
+    () => localStorage.getItem("aria-active-project") || null
+  );
+  const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
+
+  const refreshProjects = async () => {
+    const list = await fetchProjects();
+    setProjects(list);
+    const stillValid = activeProjectId && list.some((p) => p.id === activeProjectId);
+    if (!stillValid) {
+      setActiveProjectId(list[0]?.id ?? null);
+      if (activeProjectId) handleNewChat(); // active project was deleted out from under us
+    }
+  };
+
+  useEffect(() => {
+    refreshProjects().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeProjectId) localStorage.setItem("aria-active-project", activeProjectId);
+  }, [activeProjectId]);
+
+  const handleProjectSelect = (id) => {
+    setActiveProjectId(id);
+    handleNewChat();
+  };
 
   // Routing state — persisted to localStorage
   const [routingMode, setRoutingMode] = useState(
@@ -88,7 +125,7 @@ export default function App() {
       const reqMode = overrideTier != null ? "manual" : routingMode;
       const reqTier = overrideTier != null ? overrideTier : (routingMode === "manual" ? conversationTier : undefined);
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, toolsEnabled);
+      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, toolsEnabled, activeProjectId);
 
       if (!conversationId) setConversationId(data.conversation_id);
 
@@ -168,7 +205,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <header className="flex items-center gap-3 border-b border-border bg-card px-5 py-3.5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-blue-600 text-sm font-extrabold text-white">
+        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-extrabold text-primary-foreground">
           A
         </div>
         <span className="text-lg font-bold tracking-wide">ARIA</span>
@@ -176,19 +213,27 @@ export default function App() {
           Adaptive Reasoning Intelligence Assistant
         </span>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={() => setDarkMode((v) => !v)}>
+            {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            {darkMode ? "Light" : "Dark"}
+          </Button>
+          <Button variant="outline" onClick={() => setProjectSwitcherOpen(true)}>
+            <FolderKanban className="size-4" />
+            {projects.find((p) => p.id === activeProjectId)?.name || "Projects"}
+          </Button>
           <Button
             variant="outline"
             onClick={() => { setMemoryOpen((v) => !v); setSettingsOpen(false); }}
-            className={memoryOpen ? "border-violet-600 bg-violet-600/10 text-violet-300" : ""}
+            className={memoryOpen ? "border-primary bg-primary/10 text-primary" : ""}
           >
-            🧠 Memory
+            <Brain className="size-4" /> Memory
           </Button>
           <Button
             variant="outline"
             onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
-            className={settingsOpen ? "border-violet-600 bg-violet-600/10 text-violet-300" : ""}
+            className={settingsOpen ? "border-primary bg-primary/10 text-primary" : ""}
           >
-            ⚙ Settings
+            <Settings className="size-4" /> Settings
           </Button>
         </div>
       </header>
@@ -196,7 +241,7 @@ export default function App() {
       <StatusBar />
 
       <div className="relative flex flex-1 overflow-hidden">
-        <Sidebar activeId={conversationId} onSelect={loadConversation} onNew={handleNewChat} />
+        <Sidebar activeId={conversationId} projectId={activeProjectId} onSelect={loadConversation} onNew={handleNewChat} />
 
         <main className="flex flex-1 flex-col overflow-hidden">
           <MessageList
@@ -219,7 +264,7 @@ export default function App() {
           />
         </main>
 
-        <MemoryBrowser open={memoryOpen} onOpenChange={setMemoryOpen} />
+        <MemoryBrowser open={memoryOpen} onOpenChange={setMemoryOpen} projectId={activeProjectId} />
         <RouterSettings
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
@@ -227,6 +272,14 @@ export default function App() {
           onModeChange={handleModeChange}
           toolsEnabled={toolsEnabled}
           onToolToggle={handleToolToggle}
+        />
+        <ProjectSwitcher
+          open={projectSwitcherOpen}
+          onOpenChange={setProjectSwitcherOpen}
+          projects={projects}
+          activeProjectId={activeProjectId}
+          onSelect={handleProjectSelect}
+          onProjectsChange={refreshProjects}
         />
       </div>
     </div>

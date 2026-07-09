@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, Integer
+from sqlalchemy import String, Text, DateTime, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from database.sqlite import Base
 import uuid
@@ -9,10 +9,20 @@ import uuid
 
 # ─── SQLAlchemy ORM Models ─────────────────────────────────────────────────────
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(255), default="New Conversation")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -34,6 +44,7 @@ class Message(Base):
 class ChatRequest(BaseModel):
     message: str = Field("", max_length=8000)
     conversation_id: Optional[str] = None
+    project_id: Optional[str] = None     # falls back to the Default project when omitted
     stream: bool = False
     file_content: Optional[str] = None
     file_name: Optional[str] = None
@@ -64,9 +75,30 @@ class ChatResponse(BaseModel):
 
 class ConversationOut(BaseModel):
     id: str
+    project_id: str
     title: str
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+
+
+class ProjectOut(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True

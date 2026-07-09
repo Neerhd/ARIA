@@ -15,7 +15,7 @@ export default function TierConfigSection({ config }) {
             >
               <div className="mb-1 flex items-center justify-between">
                 <span className={`text-xs font-bold ${info.available ? "text-foreground" : "text-muted-foreground"}`}>
-                  T{tier} · {info.label}
+                  <span className="font-mono tabular-nums">T{tier}</span> · {info.label}
                 </span>
                 <Badge variant={info.available ? "tier1" : "outline"}>
                   {info.available ? "ready" : "not installed"}
