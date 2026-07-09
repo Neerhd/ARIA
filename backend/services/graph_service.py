@@ -509,3 +509,147 @@ async def delete_pinned_fact(fact_id: str) -> bool:
     except Exception as e:
         logger.warning(f"delete_pinned_fact failed: {e}")
         return False
+
+
+# ─── Graph visualizer (read-only) ──────────────────────────────────────────────
+
+def _truncate(text: str | None, length: int = 60) -> str:
+    text = text or ""
+    return text if len(text) <= length else text[:length].rstrip() + "…"
+
+
+async def get_graph_data(project_id: str | None, scope: str = "project") -> dict:
+    """Lean node/edge payload for the 3D graph visualizer — read-only, no full
+    prompt/response text (reference ids only, for Memory Browser drill-in).
+
+    scope="project": Episodes/Reflections filtered to project_id; connected
+    Concepts included regardless of project (Concepts are global).
+    scope="all": every Episode/Concept/Reflection across all projects.
+    """
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            episode_filter = "{project_id: $project_id}" if scope == "project" else ""
+
+            ep_result = await s.run(
+                f"""
+                MATCH (e:Episode {episode_filter})
+                OPTIONAL MATCH (e)-[:DISCUSSES]->(c:Concept)
+                WITH e, collect(DISTINCT c.name) AS concept_names
+                OPTIONAL MATCH (e)-[:NEXT]->(next:Episode{"" if scope == "all" else " {project_id: $project_id}"})
+                RETURN e.id AS id, e.prompt AS prompt, e.timestamp AS timestamp,
+                       e.recall_count AS recall_count, e.conversation_id AS conversation_id,
+                       concept_names, next.id AS next_id
+                """,
+                project_id=project_id,
+            )
+            episodes = await ep_result.data()
+
+            if scope == "project":
+                refl_result = await s.run(
+                    """
+                    MATCH (r:Reflection)-[:SYNTHESISED_FROM]->(e:Episode {project_id: $project_id})
+                    WITH DISTINCT r
+                    OPTIONAL MATCH (r)-[:SYNTHESISED_FROM]->(se:Episode)
+                    OPTIONAL MATCH (r)-[:ABOUT]->(c:Concept)
+                    RETURN r.id AS id, r.text AS text, r.concept AS concept_field,
+                           r.created_at AS created_at, r.episode_count AS episode_count,
+                           collect(DISTINCT se.id) AS episode_ids, c.name AS about_concept
+                    """,
+                    project_id=project_id,
+                )
+            else:
+                refl_result = await s.run(
+                    """
+                    MATCH (r:Reflection)
+                    OPTIONAL MATCH (r)-[:SYNTHESISED_FROM]->(se:Episode)
+                    OPTIONAL MATCH (r)-[:ABOUT]->(c:Concept)
+                    RETURN r.id AS id, r.text AS text, r.concept AS concept_field,
+                           r.created_at AS created_at, r.episode_count AS episode_count,
+                           collect(DISTINCT se.id) AS episode_ids, c.name AS about_concept
+                    """
+                )
+            reflections = await refl_result.data()
+
+            concept_names = sorted({
+                name for ep in episodes for name in (ep["concept_names"] or [])
+            } | {
+                r["about_concept"] for r in reflections if r["about_concept"]
+            })
+
+            if concept_names:
+                if scope == "project":
+                    concept_result = await s.run(
+                        """
+                        MATCH (c:Concept) WHERE c.name IN $names
+                        OPTIONAL MATCH (c)<-[:DISCUSSES]-(e:Episode {project_id: $project_id})
+                        WITH c, count(e) AS project_count
+                        RETURN c.name AS name, c.episode_count AS total_count, project_count
+                        """,
+                        names=concept_names,
+                        project_id=project_id,
+                    )
+                else:
+                    concept_result = await s.run(
+                        """
+                        MATCH (c:Concept) WHERE c.name IN $names
+                        RETURN c.name AS name, c.episode_count AS total_count, null AS project_count
+                        """,
+                        names=concept_names,
+                    )
+                concepts = await concept_result.data()
+            else:
+                concepts = []
+
+        nodes = []
+        edges = []
+
+        for ep in episodes:
+            nodes.append({
+                "id": f"episode:{ep['id']}",
+                "type": "episode",
+                "label": _truncate(ep["prompt"]),
+                "metadata": {
+                    "conversation_id": ep["conversation_id"],
+                    "timestamp": ep["timestamp"],
+                    "recall_count": ep["recall_count"],
+                    "ref_id": ep["id"],
+                },
+            })
+            for name in ep["concept_names"] or []:
+                edges.append({"source": f"episode:{ep['id']}", "target": f"concept:{name}", "type": "DISCUSSES"})
+            if ep["next_id"]:
+                edges.append({"source": f"episode:{ep['id']}", "target": f"episode:{ep['next_id']}", "type": "NEXT"})
+
+        for r in reflections:
+            nodes.append({
+                "id": f"reflection:{r['id']}",
+                "type": "reflection",
+                "label": _truncate(r["text"] or r["concept_field"]),
+                "metadata": {
+                    "concept": r["concept_field"],
+                    "created_at": r["created_at"],
+                    "episode_count": r["episode_count"],
+                    "ref_id": r["id"],
+                },
+            })
+            for eid in r["episode_ids"] or []:
+                edges.append({"source": f"reflection:{r['id']}", "target": f"episode:{eid}", "type": "SYNTHESISED_FROM"})
+            if r["about_concept"]:
+                edges.append({"source": f"reflection:{r['id']}", "target": f"concept:{r['about_concept']}", "type": "ABOUT"})
+
+        for c in concepts:
+            metadata = {"episode_count": c["total_count"], "ref_id": c["name"]}
+            if c["project_count"] is not None:
+                metadata["project_episode_count"] = c["project_count"]
+            nodes.append({
+                "id": f"concept:{c['name']}",
+                "type": "concept",
+                "label": _truncate(c["name"], 40),
+                "metadata": metadata,
+            })
+
+        return {"nodes": nodes, "edges": edges}
+    except Exception as e:
+        logger.warning(f"get_graph_data failed: {e}")
+        return {"nodes": [], "edges": []}

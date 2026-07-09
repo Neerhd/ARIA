@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Brain } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -9,7 +10,7 @@ import ReflectionsTab from "./memory/ReflectionsTab";
 
 const TABS = ["pinned", "episodes", "concepts", "reflections"];
 
-export default function MemoryBrowser({ open, onOpenChange, projectId }) {
+export default function MemoryBrowser({ open, onOpenChange, projectId, jumpTo }) {
   const {
     tab, setTab,
     episodes, concepts, stats, reflections, pinnedFacts,
@@ -17,6 +18,20 @@ export default function MemoryBrowser({ open, onOpenChange, projectId }) {
     visibleEpisodes,
     handleConceptClick, handleRunConsolidation, handleDeleteFact,
   } = useMemoryBrowser(open, projectId);
+
+  // Click-through from the Graph view (M12) — reuses this existing detail
+  // view rather than duplicating it, per the M12 spec.
+  useEffect(() => {
+    if (!jumpTo) return;
+    if (jumpTo.type === "concept") {
+      handleConceptClick(jumpTo.ref);
+    } else if (jumpTo.type === "reflection") {
+      setTab("reflections");
+    } else {
+      setTab("episodes");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

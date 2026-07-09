@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import StatusBar from "./components/StatusBar";
 import Sidebar from "./components/Sidebar";
 import MessageList from "./components/MessageList";
@@ -8,10 +8,13 @@ import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Moon, Sun, Brain, Settings, FolderKanban } from "lucide-react";
+import { Moon, Sun, Brain, Settings, FolderKanban, Share2 } from "lucide-react";
 import { sendMessage, fetchMessages, uploadFile, fetchProjects } from "./services/api";
 
+const GraphView = lazy(() => import("./components/GraphView"));
+
 export default function App() {
+  const [view, setView] = useState("chat"); // "chat" | "graph"
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -19,6 +22,13 @@ export default function App() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [memoryJumpTo, setMemoryJumpTo] = useState(null);
+
+  const handleJumpToMemory = (node) => {
+    setMemoryJumpTo({ type: node.type, ref: node.metadata?.ref_id });
+    setSettingsOpen(false);
+    setMemoryOpen(true);
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -83,6 +93,7 @@ export default function App() {
   const handleModeChange = (mode) => setRoutingMode(mode);
 
   const loadConversation = async (id) => {
+    setView("chat");
     setConversationId(id);
     setError(null);
     setConversationTier(1);
@@ -223,6 +234,13 @@ export default function App() {
           </Button>
           <Button
             variant="outline"
+            onClick={() => setView((v) => (v === "graph" ? "chat" : "graph"))}
+            className={view === "graph" ? "border-primary bg-primary/10 text-primary" : ""}
+          >
+            <Share2 className="size-4" /> Graph
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => { setMemoryOpen((v) => !v); setSettingsOpen(false); }}
             className={memoryOpen ? "border-primary bg-primary/10 text-primary" : ""}
           >
@@ -241,30 +259,52 @@ export default function App() {
       <StatusBar />
 
       <div className="relative flex flex-1 overflow-hidden">
-        <Sidebar activeId={conversationId} projectId={activeProjectId} onSelect={loadConversation} onNew={handleNewChat} />
+        <Sidebar
+          activeId={conversationId}
+          projectId={activeProjectId}
+          onSelect={loadConversation}
+          onNew={() => { setView("chat"); handleNewChat(); }}
+        />
 
         <main className="flex flex-1 flex-col overflow-hidden">
-          <MessageList
-            messages={messages}
-            loading={loading}
-            onRoutingDecision={handleRoutingDecision}
-          />
-          {error && (
-            <Alert variant="destructive" className="mx-5 mb-2">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+          {view === "graph" ? (
+            <Suspense fallback={
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Loading 3D graph…
+              </div>
+            }>
+              <GraphView active={view === "graph"} projectId={activeProjectId} onJumpToMemory={handleJumpToMemory} />
+            </Suspense>
+          ) : (
+            <>
+              <MessageList
+                messages={messages}
+                loading={loading}
+                onRoutingDecision={handleRoutingDecision}
+              />
+              {error && (
+                <Alert variant="destructive" className="mx-5 mb-2">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <InputBar
+                onSend={handleSend}
+                disabled={loading}
+                routingMode={routingMode}
+                conversationTier={conversationTier}
+                onTierChange={setConversationTier}
+                toolsEnabled={toolsEnabled}
+              />
+            </>
           )}
-          <InputBar
-            onSend={handleSend}
-            disabled={loading}
-            routingMode={routingMode}
-            conversationTier={conversationTier}
-            onTierChange={setConversationTier}
-            toolsEnabled={toolsEnabled}
-          />
         </main>
 
-        <MemoryBrowser open={memoryOpen} onOpenChange={setMemoryOpen} projectId={activeProjectId} />
+        <MemoryBrowser
+          open={memoryOpen}
+          onOpenChange={setMemoryOpen}
+          projectId={activeProjectId}
+          jumpTo={memoryJumpTo}
+        />
         <RouterSettings
           open={settingsOpen}
           onOpenChange={setSettingsOpen}

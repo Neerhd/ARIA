@@ -11,6 +11,7 @@ from api.memory import router as memory_router
 from api.consolidation import router as consolidation_router, run_consolidation_with_log
 from api.router import router as router_router
 from api.projects import router as projects_router
+from api.graph import router as graph_router
 import asyncio
 import logging
 
@@ -74,6 +75,7 @@ app.include_router(memory_router)
 app.include_router(consolidation_router)
 app.include_router(router_router)
 app.include_router(projects_router)
+app.include_router(graph_router)
 
 
 @app.get("/")

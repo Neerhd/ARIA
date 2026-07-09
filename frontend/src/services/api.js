@@ -79,6 +79,15 @@ export async function fetchMemoryStats(projectId) {
   return res.json();
 }
 
+export async function fetchGraph(projectId, scope = "project") {
+  const qs = scope === "all"
+    ? "scope=all"
+    : `project_id=${encodeURIComponent(projectId)}&scope=project`;
+  const res = await fetch(`${BASE}/graph?${qs}`);
+  if (!res.ok) return { nodes: [], edges: [] };
+  return res.json();
+}
+
 export async function fetchReflections(projectId, limit = 20) {
   const res = await fetch(`${BASE}/consolidation/reflections?project_id=${encodeURIComponent(projectId)}&limit=${limit}`);
   if (!res.ok) return [];
