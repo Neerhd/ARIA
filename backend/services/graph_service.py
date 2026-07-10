@@ -182,6 +182,28 @@ async def get_episodes_by_concepts(concepts: list[str], project_id: str, limit: 
         return []
 
 
+async def get_episodes_by_ids(episode_ids: list[str]) -> list[dict]:
+    """Lean lookup for provenance citations (M14) — just enough to label a
+    source, never full prompt/response text.
+    """
+    if not episode_ids:
+        return []
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (e:Episode) WHERE e.id IN $ids
+                RETURN e.id AS id, e.prompt AS prompt, e.timestamp AS timestamp
+                """,
+                ids=episode_ids,
+            )
+            return [dict(r) for r in await result.data()]
+    except Exception as e:
+        logger.warning(f"get_episodes_by_ids failed: {e}")
+        return []
+
+
 # ─── Memory browser queries ────────────────────────────────────────────────────
 
 async def get_recent_episodes(project_id: str, limit: int = 20) -> list[dict]:

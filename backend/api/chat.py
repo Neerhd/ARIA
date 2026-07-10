@@ -10,7 +10,7 @@ from services.ollama_service import check_ollama_alive
 from services.memory_service import store_memory, search_memory
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
-    store_fact, get_pinned_facts,
+    store_fact, get_pinned_facts, get_episodes_by_ids,
 )
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
@@ -179,6 +179,27 @@ async def send_message(
         lines = "\n".join(f"- {f['text']}" for f in pinned_facts)
         memory_context = f"\n\nPinned facts (always remember these):\n{lines}" + memory_context
 
+    # ── Build lean provenance for this reply (M14) — surfaces what was already
+    # retrieved above, no new retrieval, no full prompt/response text ─────────
+    sources: list[dict] = []
+    if recalled_ids:
+        for e in await get_episodes_by_ids(recalled_ids):
+            prompt = e.get("prompt") or ""
+            sources.append({
+                "type": "episode",
+                "ref_id": e["id"],
+                "label": prompt[:80] + ("…" if len(prompt) > 80 else ""),
+                "timestamp": e.get("timestamp"),
+            })
+    for f in pinned_facts:
+        text = f.get("text") or ""
+        sources.append({
+            "type": "fact",
+            "ref_id": f["id"],
+            "label": text[:80] + ("…" if len(text) > 80 else ""),
+            "timestamp": f.get("created_at"),
+        })
+
     # ── If this is a remember request, guide ARIA to acknowledge it ───────────
     if new_fact_text:
         memory_context += (
@@ -205,6 +226,12 @@ async def send_message(
                 ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
                 ".xlsx (markdown table or CSV → spreadsheet). "
                 "Always write content as Markdown — the system converts it to the target format automatically."
+            ),
+            "query_graph": (
+                "ask a natural-language question about the user's memory graph — past "
+                "conversations, topics, and synthesised patterns — via query_graph(question). "
+                "Use this instead of guessing when asked what was discussed before, how often, "
+                "or how topics relate."
             ),
         }
         cap_lines = "\n".join(
@@ -234,7 +261,7 @@ async def send_message(
 
     # ── Call the model (with agentic tool loop if tools are enabled) ───────────
     if tools_enabled:
-        reply, tools_used = await run_agentic_loop(actual_tier, messages, tools_enabled)
+        reply, tools_used = await run_agentic_loop(actual_tier, messages, tools_enabled, convo.project_id)
     else:
         reply = await dispatch(actual_tier, messages)
         tools_used: list[str] = []
@@ -298,6 +325,7 @@ async def send_message(
         tier=actual_tier,
         signals=signals,
         tools_used=tools_used,
+        sources=sources,
     )
 
 

@@ -1,4 +1,4 @@
-import { Search, FolderOpen, Save } from "lucide-react";
+import { Search, FolderOpen, Save, Network } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -22,6 +22,13 @@ const TOOLS = [
     label: "File Writer",
     icon: Save,
     desc: "ARIA can create and write files to any local path (e.g. save a report to your Desktop).",
+    note: "Auto-upgrades to T3 for reliable tool execution",
+  },
+  {
+    key: "query_graph",
+    label: "Query Memory Graph",
+    icon: Network,
+    desc: "Ask ARIA questions about past conversations and topics — answered by querying the knowledge graph directly. Read-only.",
     note: "Auto-upgrades to T3 for reliable tool execution",
   },
 ];

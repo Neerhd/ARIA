@@ -68,6 +68,7 @@ class ChatResponse(BaseModel):
     tier: int = 1
     signals: list[str] = []
     tools_used: list[str] = []
+    sources: list[dict] = []
     permission_required: bool = False
     suggested_tier: Optional[int] = None
     suggested_model: Optional[str] = None

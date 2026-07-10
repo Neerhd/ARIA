@@ -89,6 +89,29 @@ _TOOL_DEFS = {
             },
         },
     },
+    "query_graph": {
+        "type": "function",
+        "function": {
+            "name": "query_graph",
+            "description": (
+                "Ask a natural-language question about the user's memory graph — past "
+                "conversations (Episodes), topics (Concepts), and synthesised patterns "
+                "(Reflections). Use this when the user asks what they've discussed before, "
+                "how often, or how topics relate to each other, rather than searching new "
+                "information."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The natural-language question to answer from the memory graph.",
+                    }
+                },
+                "required": ["question"],
+            },
+        },
+    },
 }
 
 
@@ -115,6 +138,14 @@ async def _exec_file_reader(args: dict) -> str:
         return text
     except Exception as e:
         return f"Error reading file: {e}"
+
+
+async def _exec_query_graph(args: dict, project_id: str) -> str:
+    from services.graph_query_service import query_graph
+    question = args.get("question", "").strip()
+    if not question:
+        return "Error: no question provided."
+    return await query_graph(question, project_id)
 
 
 async def _exec_web_search(args: dict) -> str:
@@ -311,7 +342,7 @@ async def _exec_file_writer(args: dict) -> str:
         return f"Error writing file: {e}"
 
 
-async def execute_tool(name: str, args: dict) -> str:
+async def execute_tool(name: str, args: dict, project_id: str | None = None) -> str:
     """Dispatch a tool call by name and return its string result."""
     if name == "file_reader":
         return await _exec_file_reader(args)
@@ -319,6 +350,8 @@ async def execute_tool(name: str, args: dict) -> str:
         return await _exec_file_writer(args)
     if name == "web_search":
         return await _exec_web_search(args)
+    if name == "query_graph":
+        return await _exec_query_graph(args, project_id)
     return f"Unknown tool: {name}"
 
 
@@ -412,6 +445,7 @@ async def run_agentic_loop(
     tier: int,
     messages: list[dict],
     tools_enabled: list[str],
+    project_id: str | None = None,
 ) -> tuple[str, list[str]]:
     """
     Run the model with tool-call support. Loops until the model returns a plain
@@ -453,7 +487,7 @@ async def run_agentic_loop(
             args = _parse_args(fn.get("arguments", {}))
             logger.info(f"Tool call: {name}({list(args.keys())})")
             tool_names_used.append(name)
-            result = await execute_tool(name, args)
+            result = await execute_tool(name, args, project_id)
             logger.info(f"Tool result [{name}]: {result[:120]}")
             calls_and_results.append((call, result))
 

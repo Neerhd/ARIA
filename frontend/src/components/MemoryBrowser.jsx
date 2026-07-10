@@ -19,14 +19,16 @@ export default function MemoryBrowser({ open, onOpenChange, projectId, jumpTo })
     handleConceptClick, handleRunConsolidation, handleDeleteFact,
   } = useMemoryBrowser(open, projectId);
 
-  // Click-through from the Graph view (M12) — reuses this existing detail
-  // view rather than duplicating it, per the M12 spec.
+  // Click-through from the Graph view (M12) and inline provenance (M14) —
+  // reuses this existing detail view rather than duplicating it.
   useEffect(() => {
     if (!jumpTo) return;
     if (jumpTo.type === "concept") {
       handleConceptClick(jumpTo.ref);
     } else if (jumpTo.type === "reflection") {
       setTab("reflections");
+    } else if (jumpTo.type === "fact") {
+      setTab("pinned");
     } else {
       setTab("episodes");
     }

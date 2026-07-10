@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Paperclip, Search, FolderOpen } from "lucide-react";
+import { Paperclip, Search, FolderOpen, MessageSquareText, Pin } from "lucide-react";
 import ModelBadge from "./ModelBadge";
 import RoutingPrompt from "./RoutingPrompt";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export default function MessageList({ messages, loading, onRoutingDecision }) {
+export default function MessageList({ messages, loading, onRoutingDecision, onJumpToMemory }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -64,6 +64,23 @@ export default function MessageList({ messages, loading, onRoutingDecision }) {
                       </div>
                     )}
                     <ModelBadge tier={m.tier} model={m.model} signals={m.signals} />
+                  </div>
+                )}
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground">Based on:</span>
+                    {m.sources.map((s) => (
+                      <Badge
+                        key={s.ref_id}
+                        variant="outline"
+                        render={<button type="button" title={s.label} />}
+                        onClick={() => onJumpToMemory(s.type, s.ref_id)}
+                        className="max-w-[160px] cursor-pointer"
+                      >
+                        {s.type === "fact" ? <Pin /> : <MessageSquareText />}
+                        <span className="truncate">{s.label}</span>
+                      </Badge>
+                    ))}
                   </div>
                 )}
               </div>

@@ -13,10 +13,11 @@ TIER_SIGNALS = {
     "web_search_enabled":  "web search enabled (→ T3)",
     "file_writer_enabled": "file writer enabled (→ T3)",
     "file_reader_enabled": "file reader enabled (→ T3)",
+    "query_graph_enabled": "graph query enabled (→ T3)",
 }
 
 _LONG_CONTEXT_THRESHOLD = 15
-_T3_TOOLS = {"web_search", "file_writer", "file_reader"}
+_T3_TOOLS = {"web_search", "file_writer", "file_reader", "query_graph"}
 
 _ANTHROPIC_VERSION = "2023-06-01"
 

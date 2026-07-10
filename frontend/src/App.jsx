@@ -24,8 +24,8 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [memoryJumpTo, setMemoryJumpTo] = useState(null);
 
-  const handleJumpToMemory = (node) => {
-    setMemoryJumpTo({ type: node.type, ref: node.metadata?.ref_id });
+  const handleJumpToMemory = (type, ref) => {
+    setMemoryJumpTo({ type, ref });
     setSettingsOpen(false);
     setMemoryOpen(true);
   };
@@ -173,6 +173,7 @@ export default function App() {
           model: data.model,
           signals: data.signals,
           tools_used: data.tools_used || [],
+          sources: data.sources || [],
           conversation_id: data.conversation_id,
         },
       ]);
@@ -281,6 +282,7 @@ export default function App() {
                 messages={messages}
                 loading={loading}
                 onRoutingDecision={handleRoutingDecision}
+                onJumpToMemory={handleJumpToMemory}
               />
               {error && (
                 <Alert variant="destructive" className="mx-5 mb-2">

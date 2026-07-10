@@ -173,7 +173,7 @@ function NodeInfoPanel({ node, onJumpToMemory, onClose }) {
             </div>
           )
         ))}
-        <Button size="sm" className="w-full" onClick={() => onJumpToMemory(node)}>
+        <Button size="sm" className="w-full" onClick={() => onJumpToMemory(node.type, node.metadata?.ref_id)}>
           View in Memory Browser
         </Button>
       </CardContent>

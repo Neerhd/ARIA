@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Paperclip, Search, FolderOpen, Save, Wrench, X } from "lucide-react";
+import { Paperclip, Search, FolderOpen, Save, Network, Wrench, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,7 +8,7 @@ const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yam
 
 const TIER_VARIANTS = { 1: "tier1", 2: "tier2", 3: "tier3" };
 
-const TOOL_ICONS = { web_search: Search, file_reader: FolderOpen, file_writer: Save };
+const TOOL_ICONS = { web_search: Search, file_reader: FolderOpen, file_writer: Save, query_graph: Network };
 
 export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, toolsEnabled = [] }) {
   const [text, setText] = useState("");
