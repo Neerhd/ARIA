@@ -14,8 +14,10 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 
 | Feature | Standard RAG tools | ARIA |
 |---|---|---|
-| Memory | Vector similarity search | Knowledge graph + vector search |
+| Memory | Vector similarity search | Knowledge graph + vector search, visually explorable in 3D |
 | Learning | None — resets every session | Episodic → Semantic consolidation |
+| Transparency | Black box — no way to see why it said something | Inline citations on every memory-informed reply, plus a natural-language query tool over the graph itself |
+| Organization | One flat history | Multi-project scoping — conversations and episodic memory partitioned per project, topics stay connected across them |
 | Model routing | One model for everything | 3-tier router (fast/capable/cloud) |
 | File access | Varies | Built-in — attach any file in chat |
 | Privacy | Depends on setup | 100% local by design |
@@ -28,31 +30,34 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 ```
 ┌───────────────────────────────────────────────────────────────────┐
 │                         React Frontend                             │
-│  Chat · File Attachments · Memory Browser · Settings · Tool Pills │
+│  Chat · Project Switcher · 3D Graph View · Memory Browser         │
+│  File Attachments · Settings · Tool Pills                         │
 └──────────────────────────────┬────────────────────────────────────┘
                                │ REST  (localhost:5173 → 8000)
 ┌──────────────────────────────▼────────────────────────────────────┐
 │                         FastAPI Backend                            │
-│  /chat · /files/upload · /memory/* · /consolidation/* · /router/* │
+│  /chat · /projects · /graph · /files/upload                       │
+│  /memory/* · /consolidation/* · /router/*                         │
 │                                                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                     Agentic Tool Loop                       │  │
-│  │  web_search → SearXNG · file_reader · file_writer           │  │
+│  │  web_search → SearXNG · file_reader · file_writer            │  │
+│  │  query_graph → NL-to-Cypher (read-only, project-scoped)     │  │
 │  │  Output formats: .pdf  .docx  .xlsx  + any plain text       │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └──────┬─────────────────┬──────────────────┬────────────────────────┘
        │                 │                  │
 ┌──────▼──────┐  ┌───────▼──────┐  ┌────────▼──────────────────┐
 │   Ollama    │  │   SQLite     │  │      Memory Layer          │
-│ T1 llama3.2 │  │ Conversations│  │  ChromaDB (semantic)       │
-│ T2 qwen2.5  │  │ Messages     │  │  Neo4j (knowledge graph)   │
-│   :11434    │  │ Routing log  │  │  Episodes · Concepts       │
-└─────────────┘  └──────────────┘  │  Reflections · Facts       │
-                                   │  :7687                     │
-┌─────────────┐                    └────────────────────────────┘
-│  Anthropic  │
-│   Claude    │  ← T3 (tools, complex tasks, reasoning)
-│  (cloud)    │
+│ T1 llama3.2 │  │ Projects     │  │  ChromaDB (semantic,       │
+│ T2 qwen2.5  │  │ Conversations│  │   project-scoped)          │
+│   :11434    │  │ Messages     │  │  Neo4j (knowledge graph)   │
+└─────────────┘  │ Routing log  │  │  Episodes (project-scoped) │
+                 └──────────────┘  │  Concepts (global hubs)    │
+┌─────────────┐                    │  Reflections · Facts       │
+│  Anthropic  │                    │  :7687                     │
+│   Claude    │  ← T3 (tools,      └────────────────────────────┘
+│  (cloud)    │     complex tasks, reasoning)
 └─────────────┘
 ```
 
@@ -62,10 +67,10 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 
 | Node type | What it stores | Status |
 |---|---|---|
-| **Episode** | Raw interaction: prompt, response, timestamp, recall count | ✅ Live |
-| **Concept** | Topic node linking related episodes; tracks episode frequency | ✅ Live |
-| **Reflection** | Higher-order pattern synthesised from clusters of 3+ episodes | ✅ Live |
-| **Fact** | User-pinned permanent facts; never decay, always injected into every session | ✅ Live |
+| **Episode** | Raw interaction: prompt, response, timestamp, recall count, `project_id` | ✅ Live |
+| **Concept** | Topic node linking related episodes; tracks episode frequency. Global — not scoped to a project, since a recurring topic across projects is real signal | ✅ Live |
+| **Reflection** | Higher-order pattern synthesised from clusters of 3+ episodes *within a single project* | ✅ Live |
+| **Fact** | User-pinned permanent facts; never decay, always injected into every session, global across projects | ✅ Live |
 
 **Memory pipeline (currently active):**
 
@@ -74,7 +79,38 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 3. **Link** — Episodes are connected to their Concepts (`DISCUSSES`) and to the previous episode in the conversation (`NEXT`)
 4. **Recall** — ChromaDB semantic search finds relevant past episodes before each response
 5. **Reinforce** — Recalled episodes have their `recall_count` incremented in Neo4j
-6. **Consolidate** — A nightly background job clusters episodes by Concept (min 3 episodes), prompts the model to synthesise a Reflection, and stores it with `SYNTHESISED_FROM` and `ABOUT` edges
+6. **Consolidate** — A nightly background job clusters episodes by Concept (min 3 episodes, scoped per project), prompts the model to synthesise a Reflection, and stores it with `SYNTHESISED_FROM` and `ABOUT` edges
+
+---
+
+## Projects
+
+ARIA scopes conversations and episodic memory by project. Click the **Projects** button in the header to switch, create, rename, or delete a project.
+
+- **Conversations and Episodes belong to exactly one project.** New chats default to the active project; the Sidebar's conversation list filters to it.
+- **Concepts stay global.** A topic like "client management" showing up across two different projects is real signal ARIA keeps connecting — full siloing would lose that.
+- **Recall and consolidation are project-scoped.** A message in Project A never surfaces memories from Project B — enforced at the semantic-recall (ChromaDB) and Neo4j query layers, not just by convention.
+- **Deleting a project cascades**: its conversations, messages, Episode nodes, and semantic-memory entries are removed. Concept nodes are left untouched, since they may still serve other projects.
+- Every conversation created before Projects existed was migrated into a **Default** project — nothing was lost.
+
+---
+
+## 3D Knowledge Graph Visualizer
+
+Click **Graph** in the header to switch the main view into an interactive 3D force-directed graph of your memory — Episodes, Concepts, and Reflections rendered as distinct shapes (sphere / cube / octahedron), with Concept nodes acting as visual hubs that Episodes cluster around.
+
+- **Hover** a node for a lightweight tooltip (label, type, recall count).
+- **Click** a node to focus it — its immediate connections highlight, everything else dims, and an info panel appears with a **View in Memory Browser** button.
+- **Toggle** between the active project's graph and an all-projects view, useful for seeing where a Concept bridges multiple projects.
+- Above 300 nodes, the view auto-collapses to Concept-only with click-to-reveal, so it stays readable as memory grows.
+
+---
+
+## Memory Provenance
+
+Every reply that draws on memory shows a **"Based on:"** row of clickable citations under the message — the recalled past conversations or pinned facts that shaped the answer. Click one to jump straight into the Memory Browser.
+
+This surfaces retrieval that already happens on every turn (ChromaDB semantic recall, pinned facts) rather than adding a new lookup — the goal is making an AI's reasoning auditable instead of a black box: you can see *why* ARIA said something, not just trust that it did.
 
 ---
 
@@ -90,6 +126,12 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 | M6 | Tools + Permanent Memory | Web search, file reader/writer, multi-format export, pinned facts | ✅ Complete |
 | M7 | MVP Testing | End-to-end testing, memory pattern validation | Planned |
 | M8 | MVP Complete | Stable system, ready for Phase 2 | Planned |
+| M9 | UI Theming | Grayscale/OKLCH design system, Geist typography, shadcn/ui primitives, dark mode | ✅ Complete |
+| M10 | Projects | Multi-project scoping for conversations and memory, project switcher, cascading delete | ✅ Complete |
+| M11 | Deferred Fixes | Concept episode-count decrement on deletion, Memory Browser project-scoping | ✅ Complete |
+| M12 | 3D Knowledge Graph Visualizer | Interactive force-directed 3D graph of Episodes/Concepts/Reflections, click-to-focus, project/all-projects toggle | ✅ Complete |
+| M13 | Chat With The Graph | Natural-language querying of the memory graph via a fourth agent tool — read-only, enforced at the Neo4j transaction level | ✅ Complete |
+| M14 | Inline Memory Provenance | "Based on:" citations on memory-informed replies, click-through to Memory Browser | ✅ Complete |
 
 ---
 
@@ -175,25 +217,32 @@ ARIA/
 │   ├── main.py                 # FastAPI app + nightly consolidation scheduler
 │   ├── config.py               # Settings loaded from .env
 │   ├── requirements.txt        # Python dependencies
+│   ├── scripts/                # One-off data migration / repair scripts
+│   │   ├── migrate_projects.py     # Backfills pre-M10 data into a "Default" project
+│   │   └── fix_concept_counts.py   # Recomputes Concept.episode_count from live graph edges
 │   ├── api/
-│   │   ├── chat.py             # Chat endpoints + episodic memory + routing pipeline
+│   │   ├── chat.py             # Chat endpoint + episodic memory, routing, and provenance pipeline
 │   │   ├── consolidation.py    # Consolidation trigger, run log, reflections
 │   │   ├── files.py            # File upload and text extraction
 │   │   ├── health.py           # Health check for all services
-│   │   ├── memory.py           # Memory browser endpoints
-│   │   └── router.py           # Router config and routing log endpoints
+│   │   ├── memory.py           # Memory browser endpoints (project-scoped)
+│   │   ├── router.py           # Router config and routing log endpoints
+│   │   ├── projects.py         # Project CRUD (M10)
+│   │   └── graph.py            # Read-only graph-data endpoint for the 3D visualizer (M12)
 │   ├── database/
 │   │   ├── sqlite.py           # SQLAlchemy async engine and session
 │   │   ├── neo4j_client.py     # Neo4j async driver
 │   │   └── chroma_client.py    # ChromaDB persistent client
 │   ├── models/
-│   │   └── schemas.py          # ORM models (Conversation, Message, ConsolidationRun, RoutingLog)
+│   │   └── schemas.py          # ORM models (Project, Conversation, Message, ConsolidationRun, RoutingLog)
 │   └── services/
-│       ├── consolidation_service.py  # Reflection synthesis pipeline
+│       ├── consolidation_service.py  # Reflection synthesis pipeline (per-project clustering)
 │       ├── file_service.py           # PDF and text extraction (PyMuPDF)
 │       ├── graph_service.py          # All Neo4j read/write operations
-│       ├── memory_service.py         # ChromaDB store and semantic search
+│       ├── graph_query_service.py    # NL-to-Cypher generation + read-only execution (M13)
+│       ├── memory_service.py         # ChromaDB store and semantic search (project-scoped)
 │       ├── ollama_service.py         # Ollama chat and health check
+│       ├── project_service.py        # Default-project resolution (M10)
 │       ├── router_service.py         # Tier classification, Ollama + Anthropic + OpenAI dispatch
 │       ├── tool_service.py           # Tool definitions, executors, agentic loop, format writers
 │       ├── web_search_service.py     # SearXNG wrapper
@@ -203,17 +252,26 @@ ARIA/
 │   ├── vite.config.js          # Vite + PWA config, /api proxy
 │   ├── package.json
 │   └── src/
-│       ├── App.jsx             # Root component, routing state, settings toggle
+│       ├── App.jsx             # Root component, view/project state, provenance click-through
 │       ├── main.jsx            # Entry point
+│       ├── index.css           # M9 design tokens — OKLCH grayscale palette, radius 0, Geist fonts
 │       ├── components/
+│       │   ├── GraphView.jsx       # 3D force-directed graph (react-three-fiber) (M12)
+│       │   ├── ProjectSwitcher.jsx # Project list/create/rename/delete (M10)
 │       │   ├── InputBar.jsx        # Chat input, file attachment, tier selector
-│       │   ├── MemoryBrowser.jsx   # Episodes, Concepts, Reflections panel
-│       │   ├── MessageList.jsx     # Message thread, tier badges, routing prompts
+│       │   ├── MemoryBrowser.jsx   # Pinned/Episodes/Concepts/Reflections panel
+│       │   ├── MessageList.jsx     # Message thread, tier badges, tool badges, provenance citations
 │       │   ├── ModelBadge.jsx      # T1/T2/T3 badge on every assistant message
 │       │   ├── RoutingPrompt.jsx   # Ask-mode permission card in chat thread
-│       │   ├── RouterSettings.jsx  # Settings overlay — mode selector and tier info
-│       │   ├── Sidebar.jsx         # Conversation list
-│       │   └── StatusBar.jsx       # Live service health dots
+│       │   ├── RouterSettings.jsx  # Settings overlay — mode selector, tools, tier info
+│       │   ├── Sidebar.jsx         # Conversation list, filtered to the active project
+│       │   ├── StatusBar.jsx       # Live service health dots
+│       │   ├── memory/             # Memory Browser tab contents (one file per tab + shared cards)
+│       │   ├── settings/           # Settings sheet sections (routing mode, tools, tier config)
+│       │   └── ui/                 # shadcn/ui primitives (Badge, Sheet, Tabs, AlertDialog, ScrollArea, Table, …)
+│       ├── hooks/
+│       │   ├── useMemoryBrowser.js # Memory Browser data fetching + tab/filter state
+│       │   └── useGraphData.js     # 3D graph data fetching (M12)
 │       └── services/
 │           └── api.js          # All backend API calls
 └── data/                       # Local databases (never committed)
@@ -226,14 +284,14 @@ ARIA/
 
 ## Memory Browser
 
-Click **🧠 Memory** in the top-right corner to open the memory panel. It has three tabs:
+Click **Memory** in the top-right corner to open the memory panel. It has four tabs, scoped to the active project (Concepts stay global — see [Projects](#projects)):
 
 | Tab | What it shows |
 |---|---|
-| **Pinned** | Permanent facts saved with "remember this" — always injected into every conversation, never decay. Click the delete button to remove a fact. |
-| **Episodes** | Every conversation turn stored in Neo4j, with topic tags and recall count. Click a card to expand the full prompt and response. |
-| **Concepts** | All topic nodes extracted from conversations, sorted by frequency. Click a concept to filter the Episodes tab. |
-| **Reflections** | Higher-order patterns synthesised by the consolidation pipeline. Each card shows the concept, the synthesised insight, and how many episodes it was drawn from. Use the **Run Consolidation Now** button to trigger synthesis on demand. |
+| **Pinned** | Permanent facts saved with "remember this" — always injected into every conversation, never decay, global across projects. Click the delete button to remove a fact. |
+| **Episodes** | Every conversation turn in the active project, with topic tags and recall count. Click a card to expand the full prompt and response. |
+| **Concepts** | All topic nodes, sorted by frequency, shown with both an in-this-project count and a total-across-all-projects count. Click a concept to filter the Episodes tab. |
+| **Reflections** | Higher-order patterns synthesised by the consolidation pipeline, scoped to the active project. Each card shows the concept, the synthesised insight, and how many episodes it was drawn from. Use the **Run Consolidation Now** button to trigger synthesis on demand. |
 
 Reflections are also generated automatically every 24 hours by the background scheduler.
 
@@ -255,13 +313,13 @@ ARIA has a three-tier model system. The router automatically picks the right mod
 |---|---|---|
 | **T1** | `llama3.2:3b` (local, ~2 GB) | Default — fast responses for casual chat and simple questions |
 | **T2** | `qwen2.5:14b` (local, ~9 GB) | File attached, or conversation exceeds 15 messages |
-| **T3** | `claude-sonnet-4-6` (cloud) | Any tool enabled (web search, file reader/writer), or manually selected |
+| **T3** | `claude-sonnet-4-6` (cloud) | Any tool enabled (web search, file reader/writer, query the graph), or manually selected |
 
 T3 auto-activates whenever a tool is enabled because local models do not reliably generate structured tool calls. T3 requires `TIER3_API_KEY` in `.env`.
 
 ### Routing modes
 
-Click **⚙ Settings** in the top-right corner to choose how the router behaves:
+Click **Settings** in the top-right corner to choose how the router behaves:
 
 | Mode | Behaviour |
 |---|---|
@@ -275,13 +333,14 @@ Every routing decision is logged to the `routing_logs` SQLite table with the mod
 
 ## Tools
 
-Enable tools in **⚙ Settings → Tools**. Enabling any tool automatically routes the request to T3 (Claude Sonnet) for reliable agentic execution.
+Enable tools in **Settings → Tools**. Enabling any tool automatically routes the request to T3 (Claude Sonnet) for reliable agentic execution.
 
 | Tool | What it does | Notes |
 |---|---|---|
-| **Web Search** 🔍 | Searches the web via a self-hosted SearXNG instance and returns results to ARIA | Requires SearXNG on `localhost:8080` (installed automatically) |
-| **File Reader** 📂 | Reads any local file by absolute path | Supports all text formats up to 50,000 characters |
-| **File Writer** 💾 | Creates files at any absolute path | Supports rich output formats (see below) |
+| **Web Search** | Searches the web via a self-hosted SearXNG instance and returns results to ARIA | Requires SearXNG on `localhost:8080` (installed automatically) |
+| **File Reader** | Reads any local file by absolute path | Supports all text formats up to 50,000 characters |
+| **File Writer** | Creates files at any absolute path | Supports rich output formats (see below) |
+| **Query Memory Graph** | Ask a natural-language question about past conversations and topics — translated into Cypher, executed read-only, answered in plain English | Scoped to the active project (Concepts remain global). Strictly read-only, enforced at the Neo4j transaction level, not just by prompting. Doesn't yet produce inline citations the way regular memory recall does (see [Memory Provenance](#memory-provenance)) — a natural follow-up, not yet built |
 
 ### File output formats
 
@@ -349,9 +408,25 @@ The backend exposes a REST API documented interactively at [http://localhost:800
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/chat` | Send a message (with optional file content) |
-| `GET` | `/chat/conversations` | List all conversations |
+| `POST` | `/chat` | Send a message (optional file content, `project_id`, `tools_enabled`). Response includes `sources` — provenance citations for any recalled memory used |
+| `GET` | `/chat/conversations` | List conversations (`?project_id=` to filter) |
 | `GET` | `/chat/conversations/{id}/messages` | Get messages in a conversation |
+
+### Projects
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/projects` | Create a project |
+| `GET` | `/projects` | List all projects |
+| `GET` | `/projects/{id}` | Get a project |
+| `PATCH` | `/projects/{id}` | Rename or update a project's description |
+| `DELETE` | `/projects/{id}` | Delete a project — cascades to its conversations, messages, and memory (Concepts are untouched) |
+
+### Graph
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/graph` | Nodes and edges for the 3D visualizer. `?project_id=&scope=project` (default, Episodes/Reflections scoped, connected Concepts included) or `?scope=all` |
 
 ### Files
 
@@ -361,21 +436,23 @@ The backend exposes a REST API documented interactively at [http://localhost:800
 
 ### Memory
 
+All endpoints below require `?project_id=` (Concepts are returned globally but annotated with a per-project count alongside the total).
+
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/memory/episodes` | Recent episodes with topics (`?limit=`) |
-| `GET` | `/memory/concepts` | Top concepts by episode count (`?limit=`) |
-| `GET` | `/memory/stats` | Count of episodes, concepts, reflections, and pinned facts |
-| `GET` | `/memory/pinned` | All pinned Fact nodes |
+| `GET` | `/memory/episodes` | Recent episodes with topics, scoped to the project (`?limit=`) |
+| `GET` | `/memory/concepts` | Top concepts by episode count — global, with `project_episode_count` and total `episode_count` per concept (`?limit=`) |
+| `GET` | `/memory/stats` | Episode/reflection counts scoped to the project; concept/fact counts global |
+| `GET` | `/memory/pinned` | All pinned Fact nodes (global) |
 | `DELETE` | `/memory/pinned/{fact_id}` | Delete a pinned fact |
 
 ### Consolidation
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/consolidation/run` | Manually trigger the consolidation pipeline |
+| `POST` | `/consolidation/run` | Manually trigger the consolidation pipeline — clusters per project, not globally |
 | `GET` | `/consolidation/runs` | List past consolidation run logs (`?limit=`) |
-| `GET` | `/consolidation/reflections` | List all synthesised Reflection nodes (`?limit=`) |
+| `GET` | `/consolidation/reflections` | Synthesised Reflection nodes, scoped to a project (`?project_id=&limit=`) |
 
 ### Router
 

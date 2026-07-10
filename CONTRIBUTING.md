@@ -51,7 +51,7 @@ git checkout -b feature/your-feature-name
 **Frontend changes:**
 - Components go in `frontend/src/components/`
 - API calls go in `frontend/src/services/api.js`
-- Keep styling consistent with existing inline styles
+- Keep styling consistent with the existing design system — Tailwind utility classes bound to the CSS custom properties in `index.css` (grayscale/OKLCH tokens, `--radius: 0`), and shadcn/ui primitives from `frontend/src/components/ui/`. Don't hand-roll new colors or component internals; extend the token system instead
 
 **Never commit:**
 - `.env` files
@@ -66,7 +66,7 @@ Before submitting:
 1. Run the full stack: `bash scripts/start.sh`
 2. Open [http://localhost:5173](http://localhost:5173) and verify the chat works end-to-end
 3. Test the health check: `curl http://localhost:8000/health`
-4. Open the Memory Browser (🧠 Memory button) and verify Episodes and Concepts populate after a few messages
+4. Open the Memory Browser (Memory button) and verify Episodes and Concepts populate after a few messages
 5. In the Reflections tab, click **Run Consolidation Now** and verify it returns a result (needs 3+ episodes on one concept to create a reflection)
 6. Test the model router: `curl http://localhost:8000/router/config` and verify T1/T2 show as `ready`
 7. Test Auto mode — attach a file and confirm the response shows a T2 badge
@@ -75,12 +75,15 @@ Before submitting:
 10. If you changed the file upload feature, test with both a `.txt` and a `.pdf`
 11. If you changed `graph_service.py`, verify the Neo4j schema still initialises cleanly on startup (look for "Neo4j schema ready" in the backend log)
 12. If you changed `router_service.py` or `api/router.py`, confirm routing decisions appear in the `routing_logs` SQLite table
+13. If you changed anything project-scoping related, create a second project and confirm a message in one never recalls memory from the other (check both the reply content and, if relevant, the `/graph` or `/memory/*` responses directly)
+14. If you changed `graph_query_service.py` or anything touching `query_graph`, confirm a deliberately malicious question (e.g. "delete all episodes about X") is refused and doesn't change any row counts in SQLite or Neo4j — read-only must hold even if you think your change couldn't affect it
+15. If you changed the Memory Browser or chat provenance, confirm the "Based on:" citations under a reply still click through to the right tab
 
 ### Submitting
 
 Push your branch and open a pull request against `main`. In the PR description:
 - Explain what the change does and why
-- Reference the relevant milestone (M1–M8) if applicable
+- Reference the relevant milestone (M1–M14) if applicable
 - Include before/after screenshots for UI changes
 
 ## Code of conduct
