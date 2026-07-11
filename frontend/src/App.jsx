@@ -268,6 +268,8 @@ export default function App() {
     ],
   });
 
+  const pinnedConversations = conversations.filter((c) => c.pinned);
+
   const sidebarSections = [
     {
       id: "projects",
@@ -286,10 +288,21 @@ export default function App() {
       })),
       actions: [{ icon: Plus, label: "New project", onClick: () => setProjectSwitcherOpen(true) }],
     },
+    // Only rendered while at least one chat is pinned — disappears entirely
+    // once the last pin is removed, rather than showing an empty section.
+    ...(pinnedConversations.length > 0
+      ? [
+          {
+            id: "pinned",
+            title: "Pinned",
+            items: pinnedConversations.map(toChatItem),
+          },
+        ]
+      : []),
     {
       id: "chats",
       title: "Chats",
-      items: conversations.map(toChatItem),
+      items: conversations.filter((c) => !c.pinned).map(toChatItem),
       emptyLabel: "No recent chats",
       actions: [{ icon: Plus, label: "New chat", onClick: handleNewChat }],
     },

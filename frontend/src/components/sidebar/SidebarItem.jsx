@@ -72,7 +72,7 @@ const SidebarItem = forwardRef(function SidebarItem(
       )}
 
       {interactive && actions.length > 0 && (
-        <span className="hidden shrink-0 items-center gap-1 group-hover/sidebar-item:flex group-focus-within/sidebar-item:flex">
+        <span className="hidden shrink-0 items-center gap-1 group-hover/sidebar-item:flex group-has-[:focus-visible]/sidebar-item:flex">
           {actions.slice(0, 2).map((action, i) => (
             <button
               key={i}
