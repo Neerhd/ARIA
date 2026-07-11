@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.schemas import (
-    ChatRequest, ChatResponse, ConversationOut, MessageOut,
+    ChatRequest, ChatResponse, ConversationOut, ConversationUpdate, MessageOut,
     Conversation, Message, RoutingLog, Project,
 )
 from database.sqlite import get_db
@@ -333,11 +333,23 @@ async def send_message(
 
 @router.get("/conversations", response_model=list[ConversationOut])
 async def list_conversations(project_id: str | None = None, db: AsyncSession = Depends(get_db)):
-    query = select(Conversation).order_by(Conversation.updated_at.desc()).limit(50)
+    query = select(Conversation).order_by(Conversation.pinned.desc(), Conversation.updated_at.desc()).limit(50)
     if project_id:
         query = query.where(Conversation.project_id == project_id)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationOut)
+async def update_conversation(conversation_id: str, body: ConversationUpdate, db: AsyncSession = Depends(get_db)):
+    convo = await db.get(Conversation, conversation_id)
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if body.pinned is not None:
+        convo.pinned = body.pinned
+    await db.commit()
+    await db.refresh(convo)
+    return convo
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])

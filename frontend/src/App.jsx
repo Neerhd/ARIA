@@ -1,6 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import StatusBar from "./components/StatusBar";
-import Sidebar from "./components/Sidebar";
+import Sidebar from "./components/sidebar/Sidebar";
 import MessageList from "./components/MessageList";
 import InputBar from "./components/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
@@ -8,8 +7,8 @@ import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Moon, Sun, Brain, Settings, FolderKanban, Share2 } from "lucide-react";
-import { sendMessage, fetchMessages, uploadFile, fetchProjects } from "./services/api";
+import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
+import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned } from "./services/api";
 
 const GraphView = lazy(() => import("./components/GraphView"));
 
@@ -41,9 +40,41 @@ export default function App() {
   );
   const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
 
+  // New Sidebar (design-system) — all conversations across projects, for
+  // the Recent Chats + Projects sections. Refetched whenever the active
+  // conversation changes (covers new-chat creation and title updates).
+  const [conversations, setConversations] = useState([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const refreshConversations = () => {
+    fetchConversations().then(setConversations).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshConversations();
+  }, [conversationId]);
+
+  const handleTogglePin = async (convo) => {
+    try {
+      await setConversationPinned(convo.id, !convo.pinned);
+      refreshConversations();
+    } catch {
+      // best-effort — list simply won't reflect the change if this fails
+    }
+  };
+
+  const handleSelectChat = (convo) => {
+    setView("chat");
+    if (convo.project_id && convo.project_id !== activeProjectId) {
+      setActiveProjectId(convo.project_id);
+    }
+    loadConversation(convo.id);
+  };
+
   const refreshProjects = async () => {
     const list = await fetchProjects();
     setProjects(list);
+    refreshConversations(); // project CRUD can add/remove conversations too
     const stillValid = activeProjectId && list.some((p) => p.id === activeProjectId);
     if (!stillValid) {
       setActiveProjectId(list[0]?.id ?? null);
@@ -61,6 +92,12 @@ export default function App() {
 
   const handleProjectSelect = (id) => {
     setActiveProjectId(id);
+    handleNewChat();
+  };
+
+  const handleNewChatInProject = (projectId) => {
+    setActiveProjectId(projectId);
+    setView("chat");
     handleNewChat();
   };
 
@@ -214,58 +251,115 @@ export default function App() {
     await _doSend(text, fileContent, fileName, truncated, overrideTier, pendingConvoId);
   };
 
+  // The "More" menu (Edit / Delete) is deferred entirely — no dropdown
+  // built yet, just the icon.
+  const toChatItem = (convo) => ({
+    id: convo.id,
+    label: convo.title || "Untitled",
+    selected: convo.id === conversationId,
+    onClick: () => handleSelectChat(convo),
+    actions: [
+      {
+        icon: convo.pinned ? PinOff : Pin,
+        label: convo.pinned ? "Unpin" : "Pin",
+        onClick: () => handleTogglePin(convo),
+      },
+      { icon: MoreHorizontal, label: "More", onClick: () => {} },
+    ],
+  });
+
+  const sidebarSections = [
+    {
+      id: "projects",
+      title: "Projects",
+      // "Default" is a backend fallback (services/project_service.py), auto-created
+      // whenever a chat happens without an explicit project — not a real project
+      // the user created, so it shouldn't be browsable as if it were one. Its
+      // conversations still show up in Chats regardless.
+      items: projects.filter((p) => p.name !== "Default").map((p) => ({
+        id: p.id,
+        label: p.name,
+        icon: FolderKanban,
+        defaultExpanded: p.id === activeProjectId,
+        children: conversations.filter((c) => c.project_id === p.id).map(toChatItem),
+        actions: [{ icon: Plus, label: "New chat in project", onClick: () => handleNewChatInProject(p.id) }],
+      })),
+      actions: [{ icon: Plus, label: "New project", onClick: () => setProjectSwitcherOpen(true) }],
+    },
+    {
+      id: "chats",
+      title: "Chats",
+      items: conversations.map(toChatItem),
+      emptyLabel: "No recent chats",
+      actions: [{ icon: Plus, label: "New chat", onClick: handleNewChat }],
+    },
+  ];
+
+  const sidebarLogo = (
+    <div className="flex size-6 shrink-0 items-center justify-center rounded-sidebar-sm bg-primary text-[11px] font-bold text-primary-foreground">
+      A
+    </div>
+  );
+
+  // Search doesn't exist yet — the item is a placeholder for future
+  // functionality. Graph/Memory moved here from the app header. Keyboard
+  // shortcuts removed for now (were visual-only hints, not wired up).
+  const sidebarNavItems = [
+    { id: "new-chat", label: "New Chat", icon: SquarePen, onClick: () => { setView("chat"); handleNewChat(); } },
+    { id: "search", label: "Search Chats", icon: Search, onClick: () => {} },
+    {
+      id: "graph",
+      label: "Graph",
+      icon: Share2,
+      active: view === "graph",
+      onClick: () => setView((v) => (v === "graph" ? "chat" : "graph")),
+    },
+    {
+      id: "memory",
+      label: "Memory",
+      icon: Brain,
+      active: memoryOpen,
+      onClick: () => { setMemoryOpen((v) => !v); setSettingsOpen(false); },
+    },
+  ];
+
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex items-center gap-3 border-b border-border bg-card px-5 py-3.5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-extrabold text-primary-foreground">
-          A
-        </div>
-        <span className="text-lg font-bold tracking-wide">ARIA</span>
-        <span className="ml-1 text-xs text-muted-foreground">
-          Adaptive Reasoning Intelligence Assistant
-        </span>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => setDarkMode((v) => !v)}>
-            {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            {darkMode ? "Light" : "Dark"}
-          </Button>
-          <Button variant="outline" onClick={() => setProjectSwitcherOpen(true)}>
-            <FolderKanban className="size-4" />
-            {projects.find((p) => p.id === activeProjectId)?.name || "Projects"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setView((v) => (v === "graph" ? "chat" : "graph"))}
-            className={view === "graph" ? "border-primary bg-primary/10 text-primary" : ""}
-          >
-            <Share2 className="size-4" /> Graph
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => { setMemoryOpen((v) => !v); setSettingsOpen(false); }}
-            className={memoryOpen ? "border-primary bg-primary/10 text-primary" : ""}
-          >
-            <Brain className="size-4" /> Memory
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
-            className={settingsOpen ? "border-primary bg-primary/10 text-primary" : ""}
-          >
-            <Settings className="size-4" /> Settings
-          </Button>
-        </div>
-      </header>
+    <div className="relative flex h-screen bg-background text-foreground">
+      <Sidebar
+        logo={sidebarLogo}
+        navItems={sidebarNavItems}
+        sections={sidebarSections}
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
+      />
 
-      <StatusBar />
-
-      <div className="relative flex flex-1 overflow-hidden">
-        <Sidebar
-          activeId={conversationId}
-          projectId={activeProjectId}
-          onSelect={loadConversation}
-          onNew={() => { setView("chat"); handleNewChat(); }}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex items-center gap-3 border-b border-border bg-card px-5 py-3.5">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-extrabold text-primary-foreground">
+            A
+          </div>
+          <span className="text-lg font-bold tracking-wide">ARIA</span>
+          <span className="ml-1 text-xs text-muted-foreground">
+            Adaptive Reasoning Intelligence Assistant
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" onClick={() => setDarkMode((v) => !v)}>
+              {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
+              {darkMode ? "Light" : "Dark"}
+            </Button>
+            <Button variant="outline" onClick={() => setProjectSwitcherOpen(true)}>
+              <FolderKanban className="size-4" />
+              {projects.find((p) => p.id === activeProjectId)?.name || "Projects"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
+              className={settingsOpen ? "border-primary bg-primary/10 text-primary" : ""}
+            >
+              <Settings className="size-4" /> Settings
+            </Button>
+          </div>
+        </header>
 
         <main className="flex flex-1 flex-col overflow-hidden">
           {view === "graph" ? (
@@ -300,30 +394,30 @@ export default function App() {
             </>
           )}
         </main>
-
-        <MemoryBrowser
-          open={memoryOpen}
-          onOpenChange={setMemoryOpen}
-          projectId={activeProjectId}
-          jumpTo={memoryJumpTo}
-        />
-        <RouterSettings
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          routingMode={routingMode}
-          onModeChange={handleModeChange}
-          toolsEnabled={toolsEnabled}
-          onToolToggle={handleToolToggle}
-        />
-        <ProjectSwitcher
-          open={projectSwitcherOpen}
-          onOpenChange={setProjectSwitcherOpen}
-          projects={projects}
-          activeProjectId={activeProjectId}
-          onSelect={handleProjectSelect}
-          onProjectsChange={refreshProjects}
-        />
       </div>
+
+      <MemoryBrowser
+        open={memoryOpen}
+        onOpenChange={setMemoryOpen}
+        projectId={activeProjectId}
+        jumpTo={memoryJumpTo}
+      />
+      <RouterSettings
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        routingMode={routingMode}
+        onModeChange={handleModeChange}
+        toolsEnabled={toolsEnabled}
+        onToolToggle={handleToolToggle}
+      />
+      <ProjectSwitcher
+        open={projectSwitcherOpen}
+        onOpenChange={setProjectSwitcherOpen}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelect={handleProjectSelect}
+        onProjectsChange={refreshProjects}
+      />
     </div>
   );
 }

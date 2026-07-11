@@ -49,6 +49,19 @@ export async function fetchConversations(projectId = null) {
   return res.json();
 }
 
+export async function setConversationPinned(conversationId, pinned) {
+  const res = await fetch(`${BASE}/chat/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchMessages(conversationId) {
   const res = await fetch(`${BASE}/chat/conversations/${conversationId}/messages`);
   if (!res.ok) throw new Error("Failed to load messages");

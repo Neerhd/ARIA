@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from pathlib import Path
@@ -20,6 +21,16 @@ class Base(DeclarativeBase):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Lightweight, additive migration — there's no Alembic in this project.
+        # create_all only creates missing tables, not missing columns on
+        # existing ones, so a column added to an ORM model after the table
+        # already exists (e.g. Conversation.pinned) needs to be backfilled
+        # by hand here. Safe to run every startup: skipped once the column
+        # is present.
+        result = await conn.execute(text("PRAGMA table_info(conversations)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "pinned" not in columns:
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0"))
 
 
 async def get_db():
