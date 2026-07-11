@@ -314,16 +314,47 @@ export default function App() {
     </div>
   );
 
+  // Global shortcuts for New Chat/Graph/Memory — Search stays visual-only
+  // until it's actually implemented. Surfaced only via the collapsed
+  // sidebar's tooltips, not as permanent inline text. Note: ⌘N/⌘M may be
+  // intercepted by the OS/browser before reaching page JS on some platforms
+  // (Mac reserves Cmd+N for a new browser window, Cmd+M to minimize).
+  useEffect(() => {
+    const handler = (e) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      switch (e.key.toLowerCase()) {
+        case "n":
+          e.preventDefault();
+          setView("chat");
+          handleNewChat();
+          break;
+        case "g":
+          e.preventDefault();
+          setView((v) => (v === "graph" ? "chat" : "graph"));
+          break;
+        case "m":
+          e.preventDefault();
+          setMemoryOpen((v) => !v);
+          setSettingsOpen(false);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // Search doesn't exist yet — the item is a placeholder for future
-  // functionality. Graph/Memory moved here from the app header. Keyboard
-  // shortcuts removed for now (were visual-only hints, not wired up).
+  // functionality. Graph/Memory moved here from the app header.
   const sidebarNavItems = [
-    { id: "new-chat", label: "New Chat", icon: SquarePen, onClick: () => { setView("chat"); handleNewChat(); } },
-    { id: "search", label: "Search Chats", icon: Search, onClick: () => {} },
+    { id: "new-chat", label: "New Chat", icon: SquarePen, shortcut: "⌘N", onClick: () => { setView("chat"); handleNewChat(); } },
+    { id: "search", label: "Search Chats", icon: Search, shortcut: "⌘K", onClick: () => {} },
     {
       id: "graph",
       label: "Graph",
       icon: Share2,
+      shortcut: "⌘G",
       active: view === "graph",
       onClick: () => setView((v) => (v === "graph" ? "chat" : "graph")),
     },
@@ -331,6 +362,7 @@ export default function App() {
       id: "memory",
       label: "Memory",
       icon: Brain,
+      shortcut: "⌘M",
       active: memoryOpen,
       onClick: () => { setMemoryOpen((v) => !v); setSettingsOpen(false); },
     },

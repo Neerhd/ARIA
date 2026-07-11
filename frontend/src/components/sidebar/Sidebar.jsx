@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SidebarItem from "./SidebarItem";
 import SidebarSection from "./SidebarSection";
+import Tooltip from "../tooltip/Tooltip";
 
 const MIN_THUMB_HEIGHT = 24;
 // Matches Tailwind's `md` breakpoint exactly, so the JS-driven bits (which
@@ -182,40 +183,41 @@ export default function Sidebar({
       >
         {effectiveCollapsed ? (
           <>
-            <button
-              type="button"
-              onClick={() => onCollapsedChange?.(false)}
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
-              className="group/thumb relative flex size-8 shrink-0 cursor-e-resize items-center justify-center rounded-sidebar-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground"
-            >
-              <span className="transition-opacity group-hover/thumb:opacity-0 group-focus-visible/thumb:opacity-0">
-                {logo}
-              </span>
-              <span className="absolute inset-0 flex items-center justify-center text-sidebar-muted-foreground opacity-0 transition-opacity group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100">
-                <PanelLeftOpen className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-              </span>
-            </button>
+            <Tooltip label="Expand sidebar" side="right">
+              <button
+                type="button"
+                onClick={() => onCollapsedChange?.(false)}
+                aria-label="Expand sidebar"
+                className="group/thumb relative flex size-8 shrink-0 cursor-e-resize items-center justify-center rounded-sidebar-md outline-none hover:bg-sidebar-item-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground"
+              >
+                <span className="transition-opacity group-hover/thumb:opacity-0 group-focus-visible/thumb:opacity-0">
+                  {logo}
+                </span>
+                <span className="absolute inset-0 flex items-center justify-center text-sidebar-muted-foreground opacity-0 transition-opacity group-hover/thumb:opacity-100 group-focus-visible/thumb:opacity-100">
+                  <PanelLeftOpen className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+              </button>
+            </Tooltip>
 
             {navItems.length > 0 && (
               <div className="flex shrink-0 flex-col items-center gap-0.5">
                 {navItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={item.onClick}
-                    aria-label={item.label}
-                    title={item.label}
-                    aria-current={item.active ? "true" : undefined}
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-sidebar-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
-                      item.active
-                        ? "bg-sidebar-item-active text-sidebar-item-active-foreground"
-                        : "text-sidebar-muted-foreground hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground"
-                    )}
-                  >
-                    <item.icon className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                  </button>
+                  <Tooltip key={item.id} label={item.label} shortcut={item.shortcut} side="right">
+                    <button
+                      type="button"
+                      onClick={item.onClick}
+                      aria-label={item.label}
+                      aria-current={item.active ? "true" : undefined}
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-sidebar-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
+                        item.active
+                          ? "bg-sidebar-item-active text-sidebar-item-active-foreground"
+                          : "text-sidebar-muted-foreground hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground"
+                      )}
+                    >
+                      <item.icon className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             )}
@@ -224,22 +226,23 @@ export default function Sidebar({
           <>
             <div className="flex shrink-0 items-center justify-between gap-1.5 px-3">
               {logo}
-              <button
-                type="button"
-                onClick={handleHeaderToggle}
-                aria-label={isMobile ? "Close sidebar" : "Collapse sidebar"}
-                title={isMobile ? "Close sidebar" : "Collapse sidebar"}
-                className={cn(
-                  "flex size-[30px] shrink-0 items-center justify-center rounded-sidebar-md text-sidebar-muted-foreground outline-none hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
-                  !isMobile && "cursor-w-resize"
-                )}
-              >
-                {isMobile ? (
-                  <X className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                ) : (
-                  <PanelLeftClose className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                )}
-              </button>
+              <Tooltip label={isMobile ? "Close sidebar" : "Collapse sidebar"} side="bottom">
+                <button
+                  type="button"
+                  onClick={handleHeaderToggle}
+                  aria-label={isMobile ? "Close sidebar" : "Collapse sidebar"}
+                  className={cn(
+                    "flex size-[30px] shrink-0 items-center justify-center rounded-sidebar-md text-sidebar-muted-foreground outline-none hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
+                    !isMobile && "cursor-w-resize"
+                  )}
+                >
+                  {isMobile ? (
+                    <X className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                  ) : (
+                    <PanelLeftClose className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                  )}
+                </button>
+              </Tooltip>
             </div>
 
             {navItems.length > 0 && (
@@ -254,7 +257,6 @@ export default function Sidebar({
                     key={item.id}
                     label={item.label}
                     icon={item.icon}
-                    shortcut={item.shortcut}
                     selected={item.active}
                     onClick={item.onClick}
                   />

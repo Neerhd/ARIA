@@ -88,6 +88,10 @@ body {
   --color-sidebar-section-foreground: var(--sidebar-section-foreground);
   --color-sidebar-scrollbar-thumb: var(--sidebar-scrollbar-thumb);
   --color-sidebar-scrollbar-thumb-hover: var(--sidebar-scrollbar-thumb-hover);
+  --color-tooltip: var(--tooltip-background);
+  --color-tooltip-border: var(--tooltip-border);
+  --color-tooltip-foreground: var(--tooltip-foreground);
+  --color-tooltip-muted-foreground: var(--tooltip-muted-foreground);
   --radius-sidebar-sm: var(--sidebar-radius-sm);
   --radius-sidebar-md: var(--sidebar-radius-md);
   --radius-sidebar-lg: var(--sidebar-radius-lg);
@@ -167,6 +171,14 @@ body {
   --sidebar-radius-sm: 6px;
   --sidebar-radius-md: 8px;
   --sidebar-radius-lg: 12px;
+
+  /* Tooltip is a fixed dark chip regardless of app theme (matches the Figma
+     reference's hardcoded colors, not a variable-bound token there) — defined
+     once here, deliberately not overridden in .dark below. */
+  --tooltip-background: oklch(0.205 0 0); /* neutral-900 */
+  --tooltip-border: oklch(0.371 0 0); /* neutral-700 */
+  --tooltip-foreground: oklch(1 0 0); /* white */
+  --tooltip-muted-foreground: oklch(0.708 0 0); /* neutral-400 */
 }
 
 .dark {
