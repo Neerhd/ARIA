@@ -20,7 +20,7 @@ def extract_text(filename: str, content: bytes) -> tuple[str, bool]:
     Raises ValueError for unsupported types.
     """
     if len(content) > MAX_FILE_BYTES:
-        raise ValueError(f"File exceeds the 20 MB limit.")
+        raise ValueError("File exceeds the 20 MB limit.")
 
     ext = Path(filename).suffix.lower()
 

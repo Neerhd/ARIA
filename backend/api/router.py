@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.schemas import RoutingLog
 from database.sqlite import get_db
-from services.router_service import tier_model
 from services.ollama_service import list_local_models
 from config import settings
 
