@@ -1,8 +1,9 @@
-import { useState, useRef, useLayoutEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { Paperclip, Plus, ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Button from "../button/Button";
 import Tooltip from "../tooltip/Tooltip";
+import { useScrollThumb } from "../../hooks/useScrollThumb";
 
 const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt";
 
@@ -28,6 +29,21 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
   const textareaRef = useRef(null);
   const baselineHeightRef = useRef(null);
 
+  // No contentRef here (unlike Sidebar) — a textarea has no separate inner
+  // content wrapper to observe, and once it hits max-height its own box stops
+  // resizing even as content keeps growing, so `update()` is also called
+  // manually below whenever `text` changes rather than relying solely on the
+  // ResizeObserver.
+  const {
+    thumb,
+    active: thumbActive,
+    setActive: setThumbActive,
+    scrolledFromTop,
+    scrolledToBottom,
+    update: updateThumb,
+    handlePointerDown: handleThumbPointerDown,
+  } = useScrollThumb(textareaRef);
+
   // Pill-shaped while the field is a single line; once it grows (wrapped
   // text or an explicit newline) it relaxes to the normal rounded corners —
   // a pill doesn't read well once the box is taller than it is round.
@@ -38,10 +54,15 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
 
     const observer = new ResizeObserver(() => {
       setIsMultiline(el.offsetHeight > baselineHeightRef.current + 2);
+      updateThumb();
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [updateThumb]);
+
+  useEffect(() => {
+    updateThumb();
+  }, [text, updateThumb]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -86,7 +107,7 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
               type="button"
               onClick={removeFile}
               aria-label="Remove attachment"
-              className="flex shrink-0 items-center justify-center outline-none"
+              className="flex shrink-0 cursor-pointer items-center justify-center outline-none"
             >
               <X className="size-3" strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -108,7 +129,7 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
                 aria-label={`Use Tier ${t}`}
                 aria-pressed={active}
                 className={cn(
-                  "font-sidebar flex h-6 items-center justify-center rounded-button px-2 text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground disabled:pointer-events-none disabled:opacity-50",
+                  "font-sidebar flex h-6 cursor-pointer items-center justify-center rounded-button px-2 text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
                   active
                     ? cn("border border-input-border", TIER_TEXT_COLOR[t])
                     : "text-muted-foreground hover:bg-button-clean-hover"
@@ -138,8 +159,8 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
       <form
         onSubmit={handleSubmit}
         className={cn(
-          "flex items-end gap-1.5 border border-input-border bg-background p-2 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-inset focus-within:ring-sidebar-muted-foreground",
-          isMultiline ? "rounded-input" : "rounded-full"
+          "flex gap-1.5 border border-input-border bg-background p-2 shadow-sm",
+          isMultiline ? "items-end rounded-input" : "items-center rounded-full"
         )}
       >
         <input
@@ -163,16 +184,50 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
           />
         </Tooltip>
 
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={1}
-          className="field-sizing-content font-sidebar min-h-0 flex-1 resize-none border-0 bg-transparent px-1.5 py-1.5 text-sm text-input-foreground outline-none placeholder:text-input-placeholder disabled:cursor-not-allowed disabled:opacity-50"
-        />
+        <div
+          className="relative min-w-0 flex-1"
+          onMouseEnter={() => setThumbActive(true)}
+          onMouseLeave={() => setThumbActive(false)}
+        >
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onScroll={updateThumb}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className={cn(
+              "scroll-hidden field-sizing-content font-sidebar max-h-32 min-h-0 w-full resize-none border-0 bg-transparent px-1.5 py-1.5 text-sm text-input-foreground outline-none placeholder:text-input-placeholder disabled:cursor-not-allowed disabled:opacity-50 sm:max-h-40 md:max-h-52",
+              thumb.height > 0 && "pr-2.5"
+            )}
+          />
+
+          {scrolledFromTop && (
+            <div
+              className="scroll-fade-top pointer-events-none absolute inset-x-0 top-0 h-4"
+              style={{ "--scroll-fade-bg": "var(--background)" }}
+            />
+          )}
+          {!scrolledToBottom && (
+            <div
+              className="scroll-fade-bottom pointer-events-none absolute inset-x-0 bottom-0 h-4"
+              style={{ "--scroll-fade-bg": "var(--background)" }}
+            />
+          )}
+
+          {thumb.height > 0 && (
+            <div
+              onPointerDown={handleThumbPointerDown}
+              className={cn(
+                "absolute right-0.5 w-1.5 cursor-grab rounded-full bg-sidebar-scrollbar-thumb transition-opacity active:cursor-grabbing hover:bg-sidebar-scrollbar-thumb-hover",
+                thumbActive ? "opacity-100" : "pointer-events-none opacity-0"
+              )}
+              style={{ top: thumb.top, height: thumb.height }}
+            />
+          )}
+        </div>
 
         <Button
           type="submit"

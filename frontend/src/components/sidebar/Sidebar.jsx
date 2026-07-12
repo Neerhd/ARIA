@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SidebarItem from "./SidebarItem";
 import SidebarSection from "./SidebarSection";
 import Tooltip from "../tooltip/Tooltip";
 import Button from "../button/Button";
+import { useScrollThumb } from "../../hooks/useScrollThumb";
 
-const MIN_THUMB_HEIGHT = 24;
 // Matches Tailwind's `md` breakpoint exactly, so the JS-driven bits (which
 // icon/action the header button uses) switch at the same width as the
 // `max-md:`/`md:` layout classes below.
@@ -67,9 +67,14 @@ export default function Sidebar({
 }) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
-  const [thumb, setThumb] = useState({ top: 0, height: 0 });
-  const [thumbActive, setThumbActive] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const {
+    thumb,
+    active: thumbActive,
+    setActive: setThumbActive,
+    scrolledFromTop: isScrolled,
+    update: updateThumb,
+    handlePointerDown: handleThumbPointerDown,
+  } = useScrollThumb(scrollRef, contentRef);
 
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -79,69 +84,6 @@ export default function Sidebar({
   }, [isMobile]);
 
   const effectiveCollapsed = isMobile ? false : collapsed;
-
-  const updateThumb = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    setIsScrolled(scrollTop > 0);
-    if (scrollHeight <= clientHeight + 1) {
-      setThumb({ top: 0, height: 0 });
-      return;
-    }
-    const height = Math.max((clientHeight / scrollHeight) * clientHeight, MIN_THUMB_HEIGHT);
-    const maxTop = clientHeight - height;
-    const top = (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-    setThumb({ top, height });
-  }, []);
-
-  useLayoutEffect(() => {
-    updateThumb();
-    // Observe the inner content wrapper, not the scroll container itself —
-    // the container's own box is height-locked by the flex layout and never
-    // resizes, so it never fires when content grows/shrinks (e.g. expanding
-    // a project row, whose expand/collapse state lives locally in
-    // SidebarTreeItem and never touches the `sections` prop here). The
-    // content wrapper is unconstrained, so its natural height tracks actual
-    // overflow correctly.
-    const content = contentRef.current;
-    if (!content) return;
-    const ro = new ResizeObserver(updateThumb);
-    ro.observe(content);
-    return () => ro.disconnect();
-  }, [updateThumb, sections]);
-
-  const handleThumbPointerDown = useCallback((e) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    e.preventDefault();
-
-    const startY = e.clientY;
-    const startScrollTop = el.scrollTop;
-    const { scrollHeight, clientHeight } = el;
-    const maxScrollTop = scrollHeight - clientHeight;
-    const thumbHeight = Math.max((clientHeight / scrollHeight) * clientHeight, MIN_THUMB_HEIGHT);
-    const maxThumbTop = clientHeight - thumbHeight;
-
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "grabbing";
-
-    const handleMove = (moveEvent) => {
-      if (maxThumbTop <= 0) return;
-      const deltaY = moveEvent.clientY - startY;
-      const scrollDelta = (deltaY / maxThumbTop) * maxScrollTop;
-      el.scrollTop = Math.min(Math.max(startScrollTop + scrollDelta, 0), maxScrollTop);
-    };
-    const handleUp = () => {
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-    };
-
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
-  }, []);
 
   const handleHeaderToggle = () => {
     if (isMobile) {
@@ -263,7 +205,7 @@ export default function Sidebar({
               <div
                 ref={scrollRef}
                 onScroll={updateThumb}
-                className={cn("sidebar-scroll-hidden h-full overflow-y-auto", thumb.height > 0 && "pr-1.5")}
+                className={cn("scroll-hidden h-full overflow-y-auto", thumb.height > 0 && "pr-1.5")}
               >
                 <div ref={contentRef} className="flex flex-col gap-3">
                   {sections.map((section) => (
@@ -277,7 +219,16 @@ export default function Sidebar({
                   ))}
                 </div>
               </div>
-              <div className="sidebar-scroll-fade pointer-events-none absolute inset-x-0 bottom-0 h-6" />
+              {isScrolled && (
+                <div
+                  className="scroll-fade-top pointer-events-none absolute inset-x-0 top-0 h-6"
+                  style={{ "--scroll-fade-bg": "var(--sidebar)" }}
+                />
+              )}
+              <div
+                className="scroll-fade-bottom pointer-events-none absolute inset-x-0 bottom-0 h-6"
+                style={{ "--scroll-fade-bg": "var(--sidebar)" }}
+              />
 
               {thumb.height > 0 && (
                 <div

@@ -46,7 +46,7 @@ const Button = forwardRef(function Button(
       type="button"
       disabled={disabled}
       className={cn(
-        "font-sidebar inline-flex shrink-0 items-center justify-center gap-1 rounded-button font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground disabled:pointer-events-none",
+        "font-sidebar inline-flex shrink-0 cursor-pointer items-center justify-center gap-1 rounded-button font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground disabled:cursor-not-allowed",
         VARIANT_CLASSES[variant],
         TEXT_SIZE[size],
         dropdown ? "py-2 pr-2 pl-3" : iconOnly ? "p-2" : "px-3 py-2",

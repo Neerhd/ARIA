@@ -52,7 +52,7 @@ const SidebarItem = forwardRef(function SidebarItem(
         aria-expanded={interactive && expandable ? expanded : undefined}
         className={cn(
           "font-sidebar flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-sidebar-md text-left text-sm",
-          interactive ? "outline-none" : "cursor-default",
+          interactive ? "cursor-pointer outline-none" : "cursor-default",
           interactive && "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground"
         )}
         {...props}
@@ -82,7 +82,7 @@ const SidebarItem = forwardRef(function SidebarItem(
                 e.stopPropagation();
                 action.onClick?.(e);
               }}
-              className="flex size-[18px] items-center justify-center rounded text-sidebar-muted-foreground outline-none hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-sidebar-muted-foreground"
+              className="flex size-[18px] cursor-pointer items-center justify-center rounded text-sidebar-muted-foreground outline-none hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-sidebar-muted-foreground"
             >
               <action.icon className="size-[14px]" strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -100,7 +100,7 @@ const SidebarItem = forwardRef(function SidebarItem(
             onClick?.(e);
           }}
           className={cn(
-            "flex size-[18px] shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-sidebar-muted-foreground",
+            "flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-sidebar-muted-foreground",
             isHeader ? "text-sidebar-section-foreground" : "text-sidebar-muted-foreground"
           )}
         >

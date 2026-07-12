@@ -37,32 +37,42 @@ body {
   background: var(--muted-foreground);
 }
 
-/* Sidebar scroll area — native scrollbar fully hidden. The visible thumb is
-   a custom-drawn, JS-positioned element (see Sidebar.jsx) that floats within
-   the container's own outer margin instead of reserving its own layout
-   space, matching the Figma reference exactly. */
-.sidebar-scroll-hidden {
+/* Custom-scrollbar containers (Sidebar, InputBar's textarea, ...) — native
+   scrollbar fully hidden. The visible thumb is a custom-drawn, JS-positioned
+   element (see useScrollThumb) that floats within the container's own outer
+   margin instead of reserving its own layout space. */
+.scroll-hidden {
   scrollbar-width: none;
 }
 
-.sidebar-scroll-hidden::-webkit-scrollbar {
+.scroll-hidden::-webkit-scrollbar {
   display: none;
   width: 0;
 }
 
-/* Subtle fade + blur at the bottom of the scrollable sidebar content, so
-   items appear to gently dissolve rather than cut off abruptly. backdrop-filter
-   has no gradient of its own — it blurs uniformly across the whole element —
-   so a plain background gradient still left the blur looking like it kicked
-   in abruptly at the top. mask-image fades the element's rendered output
-   (its solid background AND its blur) together, so both ramp from fully
-   invisible at the top to fully opaque/blurred at the bottom. */
-.sidebar-scroll-fade {
-  background: var(--sidebar);
+/* Subtle fade + blur at the top/bottom edge of a scrollable region, so
+   content appears to gently dissolve rather than cut off abruptly, instead
+   of a hard clip. backdrop-filter has no gradient of its own — it blurs
+   uniformly across the whole element — so a plain background gradient still
+   left the blur looking like it kicked in abruptly at the far edge.
+   mask-image fades the element's rendered output (its solid background AND
+   its blur) together, so both ramp from fully invisible to fully
+   opaque/blurred. Consumers set `--scroll-fade-bg` to their own surface
+   color via inline style. */
+.scroll-fade-bottom {
+  background: var(--scroll-fade-bg);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   mask-image: linear-gradient(to bottom, transparent, black);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black);
+}
+
+.scroll-fade-top {
+  background: var(--scroll-fade-bg);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  mask-image: linear-gradient(to top, transparent, black);
+  -webkit-mask-image: linear-gradient(to top, transparent, black);
 }
 
 @theme inline {
