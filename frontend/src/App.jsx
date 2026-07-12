@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import MessageList from "./components/MessageList";
-import InputBar from "./components/InputBar";
+import InputBar from "./components/input-bar/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
@@ -419,7 +419,7 @@ export default function App() {
             </Suspense>
           ) : messages.length === 0 && !loading ? (
             <div className="flex flex-1 flex-col bg-sidebar px-6 py-8 md:justify-center">
-              <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 md:flex-none md:-translate-y-10">
+              <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 md:flex-none md:-translate-y-10">
                 <div className="flex flex-1 -translate-y-6 flex-col items-center justify-center md:flex-none md:translate-y-0">
                   <p className="font-sidebar text-center text-xl font-normal text-black sm:text-2xl md:text-3xl dark:text-white">
                     {greeting}
@@ -437,7 +437,6 @@ export default function App() {
                     routingMode={routingMode}
                     conversationTier={conversationTier}
                     onTierChange={setConversationTier}
-                    toolsEnabled={toolsEnabled}
                   />
                 </div>
               </div>
@@ -455,14 +454,16 @@ export default function App() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              <InputBar
-                onSend={handleSend}
-                disabled={loading}
-                routingMode={routingMode}
-                conversationTier={conversationTier}
-                onTierChange={setConversationTier}
-                toolsEnabled={toolsEnabled}
-              />
+              <div className="px-5 pt-2 pb-4">
+                <InputBar
+                  onSend={handleSend}
+                  disabled={loading}
+                  routingMode={routingMode}
+                  conversationTier={conversationTier}
+                  onTierChange={setConversationTier}
+                  isFollowUp={messages.length > 0}
+                />
+              </div>
             </>
           )}
         </main>

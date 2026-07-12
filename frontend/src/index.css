@@ -110,10 +110,14 @@ body {
   --color-button-clean-foreground: var(--button-clean-fg);
   --color-button-clean-pressed-foreground: var(--button-clean-fg-pressed);
   --color-button-clean-disabled-foreground: var(--button-clean-fg-disabled);
+  --color-input-border: var(--input-border);
+  --color-input-foreground: var(--input-foreground);
+  --color-input-placeholder: var(--input-placeholder-foreground);
   --radius-sidebar-sm: var(--sidebar-radius-sm);
   --radius-sidebar-md: var(--sidebar-radius-md);
   --radius-sidebar-lg: var(--sidebar-radius-lg);
   --radius-button: var(--button-radius);
+  --radius-input: var(--input-radius);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -228,6 +232,16 @@ body {
   --button-clean-fg: #0d0d0d;
   --button-clean-fg-pressed: #0d0d0d;
   --button-clean-fg-disabled: #969696;
+
+  /* Composer text field — border reuses the sidebar's own right-border
+     color (same tone as the sidebar/canvas edge), focus state reuses the
+     sidebar item's exact focus ring, radius reuses the sidebar's largest
+     step. Referenced via var(), not duplicated, so these stay in sync with
+     their source tokens automatically. */
+  --input-border: var(--sidebar-border);
+  --input-foreground: var(--foreground);
+  --input-placeholder-foreground: var(--muted-foreground);
+  --input-radius: var(--sidebar-radius-lg);
 }
 
 .dark {
