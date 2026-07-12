@@ -10,6 +10,7 @@ import Tooltip from "./components/tooltip/Tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
 import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned } from "./services/api";
+import { createGreetingCycle } from "./lib/greetings";
 
 const GraphView = lazy(() => import("./components/GraphView"));
 
@@ -27,6 +28,10 @@ export default function App() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const [memoryJumpTo, setMemoryJumpTo] = useState(null);
+
+  // New-chat greeting — cycles through the full pool before repeating.
+  const [nextGreeting] = useState(() => createGreetingCycle());
+  const [greeting, setGreeting] = useState(() => nextGreeting());
 
   const handleJumpToMemory = (type, ref) => {
     setMemoryJumpTo({ type, ref });
@@ -155,6 +160,7 @@ export default function App() {
     setError(null);
     setConversationTier(1);
     setPendingRouting(null);
+    setGreeting(nextGreeting());
   };
 
   // Core send — called both on first send and after routing confirmation
@@ -315,9 +321,7 @@ export default function App() {
   ];
 
   const sidebarLogo = (
-    <div className="flex size-6 shrink-0 items-center justify-center rounded-sidebar-sm bg-primary text-[11px] font-bold text-primary-foreground">
-      A
-    </div>
+    <img src="/aria-logo.png" alt="ARIA" className="size-6 shrink-0 rounded-sidebar-sm" />
   );
 
   // Global shortcuts for New Chat/Graph/Memory — Search stays visual-only
@@ -413,6 +417,31 @@ export default function App() {
             }>
               <GraphView active={view === "graph"} projectId={activeProjectId} onJumpToMemory={handleJumpToMemory} />
             </Suspense>
+          ) : messages.length === 0 && !loading ? (
+            <div className="flex flex-1 flex-col bg-sidebar px-6 py-8 md:justify-center">
+              <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 md:flex-none md:-translate-y-10">
+                <div className="flex flex-1 -translate-y-6 flex-col items-center justify-center md:flex-none md:translate-y-0">
+                  <p className="font-sidebar text-center text-xl font-normal text-black sm:text-2xl md:text-3xl dark:text-white">
+                    {greeting}
+                  </p>
+                </div>
+                <div className="space-y-3 pb-4 md:pb-0">
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  <InputBar
+                    onSend={handleSend}
+                    disabled={loading}
+                    routingMode={routingMode}
+                    conversationTier={conversationTier}
+                    onTierChange={setConversationTier}
+                    toolsEnabled={toolsEnabled}
+                  />
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               <MessageList

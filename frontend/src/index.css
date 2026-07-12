@@ -179,9 +179,13 @@ body {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.97 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --sidebar-item-hover: oklch(0.922 0 0);
+  /* Bg values intentionally reference the clean-button tokens (declared
+     further down this same block) rather than duplicating hex values, and
+     are NOT re-declared in .dark — they track whichever theme the
+     button-clean-* vars resolve to automatically. */
+  --sidebar-item-hover: var(--button-clean-bg-hover);
   --sidebar-item-hover-foreground: oklch(0.372 0 0);
-  --sidebar-item-active: oklch(0.87 0 0);
+  --sidebar-item-active: var(--button-clean-bg-pressed);
   --sidebar-item-active-foreground: oklch(0.372 0 0);
   --sidebar-muted-foreground: oklch(0.715 0 0);
   --sidebar-section-foreground: oklch(0.269 0 0);
@@ -258,9 +262,7 @@ body {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-  --sidebar-item-hover: oklch(0.269 0 0);
   --sidebar-item-hover-foreground: oklch(0.922 0 0);
-  --sidebar-item-active: oklch(0.372 0 0);
   --sidebar-item-active-foreground: oklch(0.922 0 0);
   --sidebar-muted-foreground: oklch(0.438 0 0);
   --sidebar-section-foreground: oklch(0.922 0 0);

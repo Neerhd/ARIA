@@ -12,14 +12,6 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  if (messages.length === 0 && !loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[15px] text-muted-foreground">
-        Say something to get started.
-      </div>
-    );
-  }
-
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="flex flex-col gap-4 px-6 py-5">

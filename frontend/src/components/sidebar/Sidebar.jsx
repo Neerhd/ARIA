@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import SidebarItem from "./SidebarItem";
 import SidebarSection from "./SidebarSection";
 import Tooltip from "../tooltip/Tooltip";
+import Button from "../button/Button";
 
 const MIN_THUMB_HEIGHT = 24;
 // Matches Tailwind's `md` breakpoint exactly, so the JS-driven bits (which
@@ -153,15 +154,15 @@ export default function Sidebar({
   return (
     <>
       {isMobile && !mobileOpen && (
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open sidebar"
-          title="Open sidebar"
-          className="fixed top-3 left-3 z-40 flex size-9 items-center justify-center rounded-sidebar-md border border-sidebar-border bg-sidebar text-sidebar-muted-foreground shadow-sm outline-none hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-sidebar-muted-foreground"
-        >
-          <PanelLeftOpen className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        <Tooltip label="Open sidebar" side="right">
+          <Button
+            variant="clean"
+            icon={PanelLeftOpen}
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open sidebar"
+            className="fixed top-3 left-3 z-40"
+          />
+        </Tooltip>
       )}
 
       {isMobile && mobileOpen && (
@@ -203,20 +204,18 @@ export default function Sidebar({
               <div className="flex shrink-0 flex-col items-center gap-0.5">
                 {navItems.map((item) => (
                   <Tooltip key={item.id} label={item.label} shortcut={item.shortcut} side="right">
-                    <button
-                      type="button"
+                    <Button
+                      variant="clean"
+                      icon={item.icon}
                       onClick={item.onClick}
                       aria-label={item.label}
                       aria-current={item.active ? "true" : undefined}
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-sidebar-md outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
+                      className={
                         item.active
-                          ? "bg-sidebar-item-active text-sidebar-item-active-foreground"
-                          : "text-sidebar-muted-foreground hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground"
-                      )}
-                    >
-                      <item.icon className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                    </button>
+                          ? "bg-sidebar-item-active text-sidebar-item-active-foreground hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
+                          : ""
+                      }
+                    />
                   </Tooltip>
                 ))}
               </div>
@@ -227,21 +226,13 @@ export default function Sidebar({
             <div className="flex shrink-0 items-center justify-between gap-1.5 px-3">
               {logo}
               <Tooltip label={isMobile ? "Close sidebar" : "Collapse sidebar"} side="bottom">
-                <button
-                  type="button"
+                <Button
+                  variant="clean"
+                  icon={isMobile ? X : PanelLeftClose}
                   onClick={handleHeaderToggle}
                   aria-label={isMobile ? "Close sidebar" : "Collapse sidebar"}
-                  className={cn(
-                    "flex size-[30px] shrink-0 items-center justify-center rounded-sidebar-md text-sidebar-muted-foreground outline-none hover:bg-sidebar-item-hover hover:text-sidebar-item-hover-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground",
-                    !isMobile && "cursor-w-resize"
-                  )}
-                >
-                  {isMobile ? (
-                    <X className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                  ) : (
-                    <PanelLeftClose className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
-                  )}
-                </button>
+                  className={cn(!isMobile && "cursor-w-resize")}
+                />
               </Tooltip>
             </div>
 
