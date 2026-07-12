@@ -199,7 +199,7 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
             disabled={disabled}
             rows={1}
             className={cn(
-              "scroll-hidden field-sizing-content font-sidebar max-h-32 min-h-0 w-full resize-none border-0 bg-transparent px-1.5 py-1.5 text-sm text-input-foreground outline-none placeholder:text-input-placeholder disabled:cursor-not-allowed disabled:opacity-50 sm:max-h-40 md:max-h-52",
+              "scroll-hidden field-sizing-content font-sidebar block max-h-32 min-h-0 w-full resize-none border-0 bg-transparent px-1.5 py-0 text-sm leading-5 text-input-foreground outline-none placeholder:text-input-placeholder disabled:cursor-not-allowed disabled:opacity-50 sm:max-h-40 md:max-h-52",
               thumb.height > 0 && "pr-2.5"
             )}
           />
