@@ -78,7 +78,6 @@ const SidebarItem = forwardRef(function SidebarItem(
               key={i}
               type="button"
               aria-label={action.label}
-              title={action.label}
               onClick={(e) => {
                 e.stopPropagation();
                 action.onClick?.(e);

@@ -5,7 +5,8 @@ import InputBar from "./components/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
-import { Button } from "@/components/ui/button";
+import Button from "./components/button/Button";
+import Tooltip from "./components/tooltip/Tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
 import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned } from "./services/api";
@@ -20,7 +21,11 @@ export default function App() {
   const [error, setError] = useState(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem("aria-dark-mode");
+    if (stored !== null) return stored === "true";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
   const [memoryJumpTo, setMemoryJumpTo] = useState(null);
 
   const handleJumpToMemory = (type, ref) => {
@@ -31,6 +36,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("aria-dark-mode", String(darkMode));
   }, [darkMode]);
 
   // Projects — active project persisted to localStorage
@@ -379,30 +385,22 @@ export default function App() {
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center gap-3 border-b border-border bg-card px-5 py-3.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-extrabold text-primary-foreground">
-            A
-          </div>
-          <span className="text-lg font-bold tracking-wide">ARIA</span>
-          <span className="ml-1 text-xs text-muted-foreground">
-            Adaptive Reasoning Intelligence Assistant
-          </span>
-          <div className="ml-auto flex gap-2">
-            <Button variant="outline" onClick={() => setDarkMode((v) => !v)}>
-              {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
-              {darkMode ? "Light" : "Dark"}
-            </Button>
-            <Button variant="outline" onClick={() => setProjectSwitcherOpen(true)}>
-              <FolderKanban className="size-4" />
-              {projects.find((p) => p.id === activeProjectId)?.name || "Projects"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
-              className={settingsOpen ? "border-primary bg-primary/10 text-primary" : ""}
-            >
-              <Settings className="size-4" /> Settings
-            </Button>
+        <header className="flex items-center gap-3 bg-sidebar px-5 py-3.5">
+          <div className="ml-auto flex items-center gap-2">
+            <Tooltip label={darkMode ? "Switch to light mode" : "Switch to dark mode"} side="bottom">
+              <Button
+                variant="clean"
+                icon={darkMode ? Sun : Moon}
+                onClick={() => setDarkMode((v) => !v)}
+              />
+            </Tooltip>
+            <Tooltip label="Settings" side="bottom">
+              <Button
+                variant={settingsOpen ? "secondary" : "clean"}
+                icon={Settings}
+                onClick={() => { setSettingsOpen((v) => !v); setMemoryOpen(false); }}
+              />
+            </Tooltip>
           </div>
         </header>
 

@@ -1,11 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f0f14" />
     <link rel="manifest" href="/manifest.json" />
     <title>ARIA</title>
+    <script>
+      // Applied before first paint so there's no flash of the wrong theme —
+      // must stay in sync with the darkMode init logic in App.jsx.
+      (function () {
+        var stored = localStorage.getItem("aria-dark-mode");
+        var dark = stored !== null ? stored === "true" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

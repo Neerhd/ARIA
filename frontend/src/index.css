@@ -92,9 +92,28 @@ body {
   --color-tooltip-border: var(--tooltip-border);
   --color-tooltip-foreground: var(--tooltip-foreground);
   --color-tooltip-muted-foreground: var(--tooltip-muted-foreground);
+  --color-button-primary: var(--button-primary-bg);
+  --color-button-primary-hover: var(--button-primary-bg-hover);
+  --color-button-primary-pressed: var(--button-primary-bg-pressed);
+  --color-button-primary-disabled: var(--button-primary-bg-disabled);
+  --color-button-secondary: var(--button-secondary-bg);
+  --color-button-secondary-hover: var(--button-secondary-bg-hover);
+  --color-button-secondary-pressed: var(--button-secondary-bg-pressed);
+  --color-button-secondary-disabled: var(--button-secondary-bg-disabled);
+  --color-button-secondary-border: var(--button-secondary-border-color);
+  --color-button-secondary-border-disabled: var(--button-secondary-border-color-disabled);
+  --color-button-secondary-foreground: var(--button-secondary-fg);
+  --color-button-secondary-pressed-foreground: var(--button-secondary-fg-pressed);
+  --color-button-secondary-disabled-foreground: var(--button-secondary-fg-disabled);
+  --color-button-clean-hover: var(--button-clean-bg-hover);
+  --color-button-clean-pressed: var(--button-clean-bg-pressed);
+  --color-button-clean-foreground: var(--button-clean-fg);
+  --color-button-clean-pressed-foreground: var(--button-clean-fg-pressed);
+  --color-button-clean-disabled-foreground: var(--button-clean-fg-disabled);
   --radius-sidebar-sm: var(--sidebar-radius-sm);
   --radius-sidebar-md: var(--sidebar-radius-md);
   --radius-sidebar-lg: var(--sidebar-radius-lg);
+  --radius-button: var(--button-radius);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -179,6 +198,32 @@ body {
   --tooltip-border: oklch(0.371 0 0); /* neutral-700 */
   --tooltip-foreground: oklch(1 0 0); /* white */
   --tooltip-muted-foreground: oklch(0.708 0 0); /* neutral-400 */
+
+  --button-radius: 6px;
+
+  /* Primary is a fixed brand blue regardless of app theme (matches the Figma
+     reference, which uses identical values in both its Light and Dark
+     frames) — deliberately not overridden in .dark below. */
+  --button-primary-bg: #1e58f4;
+  --button-primary-bg-hover: #3477ff;
+  --button-primary-bg-pressed: #1745dc;
+  --button-primary-bg-disabled: #8cbdff;
+
+  --button-secondary-bg: #f3f3f3;
+  --button-secondary-bg-hover: #f9f9f9;
+  --button-secondary-bg-pressed: #e1e1e1;
+  --button-secondary-bg-disabled: #f3f3f3;
+  --button-secondary-border-color: rgba(206, 206, 206, 0.5);
+  --button-secondary-border-color-disabled: rgba(206, 206, 206, 0.5);
+  --button-secondary-fg: #0d0d0d;
+  --button-secondary-fg-pressed: #0d0d0d;
+  --button-secondary-fg-disabled: #969696;
+
+  --button-clean-bg-hover: #f9f9f9;
+  --button-clean-bg-pressed: #e1e1e1;
+  --button-clean-fg: #0d0d0d;
+  --button-clean-fg-pressed: #0d0d0d;
+  --button-clean-fg-disabled: #969696;
 }
 
 .dark {
@@ -221,6 +266,22 @@ body {
   --sidebar-section-foreground: oklch(0.922 0 0);
   --sidebar-scrollbar-thumb: oklch(0.372 0 0);
   --sidebar-scrollbar-thumb-hover: oklch(0.438 0 0);
+
+  --button-secondary-bg: #0d0d0d;
+  --button-secondary-bg-hover: #171717;
+  --button-secondary-bg-pressed: #0d0d0d;
+  --button-secondary-bg-disabled: #484848;
+  --button-secondary-border-color: rgba(13, 13, 13, 0.75);
+  --button-secondary-border-color-disabled: rgba(72, 72, 72, 0.75);
+  --button-secondary-fg: #ffffff;
+  --button-secondary-fg-pressed: #e1e1e1;
+  --button-secondary-fg-disabled: #e1e1e1;
+
+  --button-clean-bg-hover: #171717;
+  --button-clean-bg-pressed: #0d0d0d;
+  --button-clean-fg: #ffffff;
+  --button-clean-fg-pressed: #e1e1e1;
+  --button-clean-fg-disabled: #e1e1e1;
 }
 
 @layer base {
