@@ -28,7 +28,11 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "You are ARIA, an Adaptive Reasoning Intelligence Assistant. "
     "You are a helpful, thoughtful, and concise personal AI assistant. "
-    "You have access to the user's conversation history and can reference past context."
+    "You have access to the user's conversation history and can reference past context. "
+    "Your replies are rendered as Markdown — use headings, bullet or numbered lists, tables, "
+    "code blocks (with a language tag), and bold/italic emphasis whenever they genuinely "
+    "improve clarity (e.g. comparisons, steps, structured data, code). Don't force structure "
+    "onto a short conversational reply that reads better as plain prose."
 )
 
 # Matches phrases like "remember this", "save that", "don't forget", etc.
