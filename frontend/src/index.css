@@ -246,9 +246,11 @@ body {
   --button-clean-fg-pressed: #0d0d0d;
   --button-clean-fg-disabled: #969696;
 
-  /* User message bubble — same fill/text pair as the secondary button's
-     enabled state, referenced via var() so both stay in sync automatically.
-     Not re-declared in .dark for the same reason as sidebar-item-hover above. */
+  /* User message bubble — light mode reuses the secondary button's enabled
+     fill/text pair via var(), same trick as sidebar-item-hover above. Dark
+     mode overrides --bubble-background below (its own lighter gray, since
+     button-secondary-bg is too close to the chat area's pure-black bg to
+     read as a bubble) but keeps --bubble-foreground aliased. */
   --bubble-background: var(--button-secondary-bg);
   --bubble-foreground: var(--button-secondary-fg);
   /* Radius once the bubble wraps past one line — rounded-full stops reading
@@ -323,6 +325,13 @@ body {
   --button-clean-fg: #ffffff;
   --button-clean-fg-pressed: #e1e1e1;
   --button-clean-fg-disabled: #e1e1e1;
+
+  /* Overrides the light-mode alias to button-secondary-bg (#0d0d0d) — that
+     value nearly disappears against the chat area's pure-black --sidebar
+     background, so dark mode gets its own lighter fill (neutral-800).
+     --bubble-foreground stays aliased to button-secondary-fg (white),
+     which still contrasts fine against this lighter gray. */
+  --bubble-background: #262626;
 }
 
 @layer base {

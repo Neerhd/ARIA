@@ -430,7 +430,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="flex flex-1 flex-col overflow-hidden bg-sidebar">
           {view === "graph" ? (
             <Suspense fallback={
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -440,7 +440,7 @@ export default function App() {
               <GraphView active={view === "graph"} projectId={activeProjectId} onJumpToMemory={handleJumpToMemory} />
             </Suspense>
           ) : messages.length === 0 && !loading ? (
-            <div className="flex flex-1 flex-col bg-sidebar px-6 py-8 md:justify-center">
+            <div className="flex flex-1 flex-col px-6 py-8 md:justify-center">
               <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 md:flex-none md:-translate-y-10">
                 <div className="flex flex-1 -translate-y-6 flex-col items-center justify-center md:flex-none md:translate-y-0">
                   <p className="font-sidebar text-center text-xl font-normal text-black sm:text-2xl md:text-3xl dark:text-white">
