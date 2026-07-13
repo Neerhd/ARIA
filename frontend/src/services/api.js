@@ -7,14 +7,14 @@ export async function sendMessage(
   fileName = null,
   routingMode = null,
   overrideTier = null,
-  toolsEnabled = [],
+  tierCap = null,
   projectId = null,
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
   if (routingMode) body.routing_mode = routingMode;
   if (overrideTier != null) body.override_tier = overrideTier;
-  if (toolsEnabled && toolsEnabled.length > 0) body.tools_enabled = toolsEnabled;
+  if (tierCap != null) body.tier_cap = tierCap;
   if (projectId) body.project_id = projectId;
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",

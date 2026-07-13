@@ -115,6 +115,9 @@ _TOOL_DEFS = {
 }
 
 
+ALL_TOOLS = list(_TOOL_DEFS.keys())
+
+
 def build_tool_definitions(tools_enabled: list[str]) -> list[dict]:
     """Return Ollama/OpenAI tool definition objects for the enabled tool names."""
     return [_TOOL_DEFS[t] for t in tools_enabled if t in _TOOL_DEFS]
@@ -446,10 +449,15 @@ async def run_agentic_loop(
     messages: list[dict],
     tools_enabled: list[str],
     project_id: str | None = None,
+    max_tier: int | None = None,
 ) -> tuple[str, list[str]]:
     """
     Run the model with tool-call support. Loops until the model returns a plain
     text reply with no pending tool calls. Returns (reply, tool_names_used).
+
+    max_tier caps the reactive tool-refusal escalation below — manual mode's
+    "fast" preference passes 2 here so its "never spend on cloud" guarantee
+    holds even when the local model refuses to use a tool it was given.
     """
     from services.router_service import dispatch, dispatch_with_tools, _is_anthropic
     from config import settings
@@ -467,7 +475,10 @@ async def run_agentic_loop(
         reply, tool_calls = await dispatch_with_tools(tier, current_messages, tool_defs)
 
         if not tool_calls:
-            if round_num == 0 and reply and _REFUSAL_RE.search(reply) and settings.tier3_api_key:
+            if (
+                round_num == 0 and reply and _REFUSAL_RE.search(reply)
+                and settings.tier3_api_key and (max_tier is None or max_tier >= 3)
+            ):
                 logger.warning("Model refused tool (training override). Escalating to T3.")
                 tier = 3
                 is_cloud = True

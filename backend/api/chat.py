@@ -14,8 +14,8 @@ from services.graph_service import (
 )
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
-from services.router_service import classify_action, dispatch, tier_model
-from services.tool_service import run_agentic_loop
+from services.router_service import classify_action, tier_model
+from services.tool_service import run_agentic_loop, ALL_TOOLS
 from config import settings
 import uuid
 import json
@@ -124,12 +124,19 @@ async def send_message(
     history = list(reversed(history_result.scalars().all()))
 
     # ── Classify action and determine tier ─────────────────────────────────────
-    if routing_mode == "manual" and req.override_tier is not None:
+    # Every message is classified fresh from its own signals — no carry-over
+    # from a prior message's tier, in any routing mode.
+    classified_tier, signals = classify_action(req, len(history))
+
+    if req.override_tier is not None:
+        # One-shot: the ask-mode confirm/decline resend forces an exact tier
+        # for that single message, bypassing classification's result.
         actual_tier = max(1, min(3, req.override_tier))
-        classified_tier = actual_tier
-        signals: list[str] = []
+    elif req.tier_cap is not None:
+        # Manual mode's "fast" preference — classify normally, then clamp the
+        # ceiling (e.g. cap=2 means never escalate to paid/cloud T3).
+        actual_tier = min(classified_tier, max(1, req.tier_cap))
     else:
-        classified_tier, signals = classify_action(req, len(history))
         actual_tier = classified_tier
 
     # ── Ask mode: return a permission prompt instead of calling the model ──────
@@ -207,44 +214,46 @@ async def send_message(
         )
 
     # ── Build tool-capability instruction (overrides trained refusals) ────────
-    tools_enabled = req.tools_enabled or []
-    tool_instruction = ""
-    if tools_enabled:
-        import getpass as _gp
-        from pathlib import Path as _P
-        _username = _gp.getuser()
-        _home = str(_P.home())
-        _TOOL_CAPS = {
-            "web_search":  "search the web for current information via web_search(query)",
-            "file_reader": f"read any local file by absolute path via file_reader(path). Home directory: {_home}",
-            "file_writer": (
-                f"create and write files to any absolute path via file_writer(path, content). "
-                f"Home directory: {_home}. Username: {_username}. "
-                f"Example Desktop path: {_home}/Desktop/filename.txt. "
-                "Supported formats: .txt .md .html .json .csv .py and any text format (written as-is); "
-                ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
-                ".xlsx (markdown table or CSV → spreadsheet). "
-                "Always write content as Markdown — the system converts it to the target format automatically."
-            ),
-            "query_graph": (
-                "ask a natural-language question about the user's memory graph — past "
-                "conversations, topics, and synthesised patterns — via query_graph(question). "
-                "Use this instead of guessing when asked what was discussed before, how often, "
-                "or how topics relate."
-            ),
-        }
-        cap_lines = "\n".join(
-            f"  - {_TOOL_CAPS[t]}" for t in tools_enabled if t in _TOOL_CAPS
-        )
-        tool_instruction = (
-            "\n\nYou have the following tools and MUST use them — never claim you cannot "
-            "perform an action that one of your tools can do:\n"
-            + cap_lines
-            + f"\nSystem info: username={_username}, home={_home}"
-            + "\nIMPORTANT: Always use absolute paths. Never use shell substitutions like $(whoami) or $USER — use the literal values above."
-            + "\nDo not ask the user to do things manually if a tool can do it. "
-            "Call the appropriate tool directly and confirm the result to the user."
-        )
+    # Tools are always available — the model decides per-message whether one
+    # is actually relevant via function-calling, same as any other capability.
+    # No standing toggle: previously a tool being merely enabled forced every
+    # message to tier 3 regardless of relevance (see classify_action).
+    tools_enabled = ALL_TOOLS
+    import getpass as _gp
+    from pathlib import Path as _P
+    _username = _gp.getuser()
+    _home = str(_P.home())
+    _TOOL_CAPS = {
+        "web_search":  "search the web for current information via web_search(query)",
+        "file_reader": f"read any local file by absolute path via file_reader(path). Home directory: {_home}",
+        "file_writer": (
+            f"create and write files to any absolute path via file_writer(path, content). "
+            f"Home directory: {_home}. Username: {_username}. "
+            f"Example Desktop path: {_home}/Desktop/filename.txt. "
+            "Supported formats: .txt .md .html .json .csv .py and any text format (written as-is); "
+            ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
+            ".xlsx (markdown table or CSV → spreadsheet). "
+            "Always write content as Markdown — the system converts it to the target format automatically."
+        ),
+        "query_graph": (
+            "ask a natural-language question about the user's memory graph — past "
+            "conversations, topics, and synthesised patterns — via query_graph(question). "
+            "Use this instead of guessing when asked what was discussed before, how often, "
+            "or how topics relate."
+        ),
+    }
+    cap_lines = "\n".join(
+        f"  - {_TOOL_CAPS[t]}" for t in tools_enabled if t in _TOOL_CAPS
+    )
+    tool_instruction = (
+        "\n\nYou have the following tools and MUST use them — never claim you cannot "
+        "perform an action that one of your tools can do:\n"
+        + cap_lines
+        + f"\nSystem info: username={_username}, home={_home}"
+        + "\nIMPORTANT: Always use absolute paths. Never use shell substitutions like $(whoami) or $USER — use the literal values above."
+        + "\nDo not ask the user to do things manually if a tool can do it. "
+        "Call the appropriate tool directly and confirm the result to the user."
+    )
 
     # ── Build messages for the model ───────────────────────────────────────────
     if req.file_content:
@@ -258,12 +267,13 @@ async def send_message(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
-    # ── Call the model (with agentic tool loop if tools are enabled) ───────────
-    if tools_enabled:
-        reply, tools_used = await run_agentic_loop(actual_tier, messages, tools_enabled, convo.project_id)
-    else:
-        reply = await dispatch(actual_tier, messages)
-        tools_used: list[str] = []
+    # ── Call the model — always via the agentic loop, since tools are always
+    #    available; the model itself decides whether to invoke one. max_tier
+    #    keeps a manual-mode "fast" cap binding even through the loop's own
+    #    reactive tool-refusal escalation. ─────────────────────────────────
+    reply, tools_used = await run_agentic_loop(
+        actual_tier, messages, tools_enabled, convo.project_id, max_tier=req.tier_cap
+    )
 
     # ── Persist to SQLite ──────────────────────────────────────────────────────
     stored_user_content = user_text

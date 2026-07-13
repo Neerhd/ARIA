@@ -3,7 +3,6 @@ import { Settings } from "lucide-react";
 import { fetchRouterConfig } from "../services/api";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import RoutingModeSection from "./settings/RoutingModeSection";
-import ToolsSection from "./settings/ToolsSection";
 import TierConfigSection from "./settings/TierConfigSection";
 
 export default function RouterSettings({
@@ -11,8 +10,6 @@ export default function RouterSettings({
   onOpenChange,
   routingMode,
   onModeChange,
-  toolsEnabled,
-  onToolToggle,
 }) {
   const [config, setConfig] = useState(null);
 
@@ -31,7 +28,6 @@ export default function RouterSettings({
 
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           <RoutingModeSection routingMode={routingMode} onModeChange={onModeChange} />
-          <ToolsSection toolsEnabled={toolsEnabled} onToolToggle={onToolToggle} />
           <TierConfigSection config={config} />
         </div>
       </SheetContent>

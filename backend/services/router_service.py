@@ -8,16 +8,11 @@ from models.schemas import ChatRequest
 logger = logging.getLogger(__name__)
 
 TIER_SIGNALS = {
-    "file_attached":       "file attached",
-    "long_conversation":   "long conversation (15+ messages)",
-    "web_search_enabled":  "web search enabled (→ T3)",
-    "file_writer_enabled": "file writer enabled (→ T3)",
-    "file_reader_enabled": "file reader enabled (→ T3)",
-    "query_graph_enabled": "graph query enabled (→ T3)",
+    "file_attached":     "file attached",
+    "long_conversation": "long conversation (15+ messages)",
 }
 
 _LONG_CONTEXT_THRESHOLD = 15
-_T3_TOOLS = {"web_search", "file_writer", "file_reader", "query_graph"}
 
 _ANTHROPIC_VERSION = "2023-06-01"
 
@@ -33,6 +28,14 @@ def _is_anthropic() -> bool:
 
 
 def classify_action(req: ChatRequest, history_length: int) -> tuple[int, list[str]]:
+    """
+    Pre-call classification only ever reaches T1/T2 — every message is
+    evaluated fresh from its own signals, no carry-over from prior messages.
+    T3 is never pre-declared here: tools are always available to the model
+    regardless of tier, and T3 is reached reactively inside the agentic loop
+    (see tool_service.run_agentic_loop) only if the local tier's model can't
+    actually deliver on a tool call.
+    """
     tier, signals = 1, []
 
     if req.file_content:
@@ -42,14 +45,6 @@ def classify_action(req: ChatRequest, history_length: int) -> tuple[int, list[st
     if history_length >= _LONG_CONTEXT_THRESHOLD:
         signals.append("long_conversation")
         tier = max(tier, 2)
-
-    for tool in _T3_TOOLS:
-        if tool in req.tools_enabled:
-            signals.append(f"{tool}_enabled")
-            tier = max(tier, 3)
-
-    if tier == 3 and not settings.tier3_api_key:
-        tier = 2
 
     return tier, [TIER_SIGNALS.get(s, s) for s in signals]
 

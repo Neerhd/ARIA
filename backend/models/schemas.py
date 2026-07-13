@@ -50,8 +50,8 @@ class ChatRequest(BaseModel):
     file_content: Optional[str] = None
     file_name: Optional[str] = None
     routing_mode: Optional[str] = None   # "auto" | "manual" | "ask"
-    override_tier: Optional[int] = None  # explicit tier for manual / post-ask confirmation
-    tools_enabled: list[str] = []        # e.g. ["web_search", "file_reader"]
+    override_tier: Optional[int] = None  # one-shot: force this exact tier, skip classification (ask-mode confirm/decline resend)
+    tier_cap: Optional[int] = None       # manual mode only: clamp classify_action's result to at most this tier (2="fast", None="quality")
 
     def effective_message(self) -> str:
         if self.message.strip():

@@ -113,16 +113,21 @@ export default function App() {
     handleNewChat();
   };
 
-  // Routing state — persisted to localStorage
+  // Routing state — persisted to localStorage. conversationTier is
+  // display-only (the badge showing what tier the last reply actually used)
+  // — it is never sent back as an input to the next message's routing.
   const [routingMode, setRoutingMode] = useState(
     () => localStorage.getItem("aria-routing-mode") || "auto"
   );
   const [conversationTier, setConversationTier] = useState(1);
   const [pendingRouting, setPendingRouting] = useState(null);
 
-  // Tools state — persisted to localStorage
-  const [toolsEnabled, setToolsEnabled] = useState(
-    () => JSON.parse(localStorage.getItem("aria-tools-enabled") || "[]")
+  // Manual mode's coarse preference — "fast" caps every message at T2 (stays
+  // local/free, never escalates to paid T3 even reactively); "quality"
+  // applies no ceiling. A standing preference like routingMode itself, not
+  // a per-message override.
+  const [manualPreference, setManualPreference] = useState(
+    () => localStorage.getItem("aria-manual-preference") || "fast"
   );
 
   useEffect(() => {
@@ -130,14 +135,8 @@ export default function App() {
   }, [routingMode]);
 
   useEffect(() => {
-    localStorage.setItem("aria-tools-enabled", JSON.stringify(toolsEnabled));
-  }, [toolsEnabled]);
-
-  const handleToolToggle = (toolName, enabled) => {
-    setToolsEnabled((prev) =>
-      enabled ? [...prev.filter((t) => t !== toolName), toolName] : prev.filter((t) => t !== toolName)
-    );
-  };
+    localStorage.setItem("aria-manual-preference", manualPreference);
+  }, [manualPreference]);
 
   const handleModeChange = (mode) => setRoutingMode(mode);
 
@@ -184,10 +183,16 @@ export default function App() {
     setError(null);
 
     try {
+      // overrideTier is only ever set for the one-shot ask-mode confirm/decline
+      // resend (see handleRoutingDecision) — it forces that single message's
+      // tier and is never carried into subsequent messages. Manual mode never
+      // sends a raw tier; it sends a cap that classify_action's fresh
+      // per-message result gets clamped against, so signals still matter.
       const reqMode = overrideTier != null ? "manual" : routingMode;
-      const reqTier = overrideTier != null ? overrideTier : (routingMode === "manual" ? conversationTier : undefined);
+      const reqTier = overrideTier != null ? overrideTier : undefined;
+      const reqTierCap = overrideTier == null && routingMode === "manual" && manualPreference === "fast" ? 2 : undefined;
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, toolsEnabled, activeProjectId);
+      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, reqTierCap, activeProjectId);
 
       if (!conversationId) setConversationId(data.conversation_id);
 
@@ -457,7 +462,8 @@ export default function App() {
                     disabled={loading}
                     routingMode={routingMode}
                     conversationTier={conversationTier}
-                    onTierChange={setConversationTier}
+                    manualPreference={manualPreference}
+                    onPreferenceChange={setManualPreference}
                   />
                 </div>
               </div>
@@ -486,7 +492,8 @@ export default function App() {
                     disabled={loading}
                     routingMode={routingMode}
                     conversationTier={conversationTier}
-                    onTierChange={setConversationTier}
+                    manualPreference={manualPreference}
+                    onPreferenceChange={setManualPreference}
                     isFollowUp={messages.length > 0}
                     prefillText={editDraft?.text}
                     prefillKey={editDraft?.key}
@@ -509,8 +516,6 @@ export default function App() {
         onOpenChange={setSettingsOpen}
         routingMode={routingMode}
         onModeChange={handleModeChange}
-        toolsEnabled={toolsEnabled}
-        onToolToggle={handleToolToggle}
       />
       <ProjectSwitcher
         open={projectSwitcherOpen}

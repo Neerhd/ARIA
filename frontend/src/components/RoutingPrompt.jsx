@@ -1,14 +1,13 @@
-import { Paperclip, MessageSquare, Search, Save, FolderOpen, Zap } from "lucide-react";
+import { Paperclip, MessageSquare, Zap } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Badge from "./badge/Badge";
 
+// classify_action only ever emits these two now — tool use no longer
+// pre-emptively escalates the tier, so it can't appear as a signal here.
 const SIGNAL_ICONS = {
   "file attached": Paperclip,
   "long conversation (15+ messages)": MessageSquare,
-  "web search enabled (→ T3)": Search,
-  "file writer enabled (→ T3)": Save,
-  "file reader enabled (→ T3)": FolderOpen,
 };
 
 export default function RoutingPrompt({ data, onConfirm, onDecline }) {

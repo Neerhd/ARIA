@@ -14,6 +14,11 @@ const TIER_TEXT_COLOR = {
   3: "text-red-600 dark:text-red-400",
 };
 
+const PREFERENCE_OPTIONS = [
+  { key: "fast", label: "Fast" },
+  { key: "quality", label: "Quality" },
+];
+
 /**
  * The message composer — a single self-contained field (bg-background,
  * border reusing the secondary button's tone) shared by both the New Chat
@@ -21,7 +26,7 @@ const TIER_TEXT_COLOR = {
  * docked); this component only owns the field and its row of controls.
  * Pill-shaped while single-line, relaxing to rounded-input once it grows.
  */
-export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, isFollowUp = false, prefillText, prefillKey }) {
+export default function InputBar({ onSend, disabled, routingMode, conversationTier, manualPreference, onPreferenceChange, isFollowUp = false, prefillText, prefillKey }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [isMultiline, setIsMultiline] = useState(false);
@@ -124,35 +129,39 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
         </div>
       )}
 
-      {/* Manual tier selector — only present in manual routing mode */}
+      {/* Manual mode's coarse preference — replaces raw tier picking. "Fast"
+          caps every message at T2 (stays local/free); "Quality" applies no
+          ceiling. Neither is a per-message override — see App.jsx's
+          manualPreference state. */}
       {routingMode === "manual" && (
         <div className="flex shrink-0 gap-1 pb-2">
-          {[1, 2, 3].map((t) => {
-            const active = conversationTier === t;
+          {PREFERENCE_OPTIONS.map(({ key, label }) => {
+            const active = manualPreference === key;
             return (
               <button
-                key={t}
+                key={key}
                 type="button"
                 disabled={disabled}
-                onClick={() => onTierChange(t)}
-                aria-label={`Use Tier ${t}`}
+                onClick={() => onPreferenceChange(key)}
                 aria-pressed={active}
                 className={cn(
                   "font-sidebar flex h-6 cursor-pointer items-center justify-center rounded-button px-2 text-xs font-bold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
                   active
-                    ? cn("border border-input-border", TIER_TEXT_COLOR[t])
+                    ? "border border-input-border text-input-foreground"
                     : "text-muted-foreground hover:bg-button-clean-hover"
                 )}
               >
-                T{t}
+                {label}
               </button>
             );
           })}
         </div>
       )}
 
-      {/* Auto/ask mode tier indicator — only present when the router picked above T1 */}
-      {routingMode !== "manual" && conversationTier > 1 && (
+      {/* Passive tier readout — what the last reply actually used, never an
+          input. Shown in every mode, not just auto/ask, since manual mode no
+          longer exposes raw tier numbers to set. */}
+      {conversationTier > 1 && (
         <div className="pb-2">
           <span
             className={cn(
