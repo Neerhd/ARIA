@@ -110,6 +110,7 @@ body {
   --radius-avatar-sm: var(--avatar-radius-sm);
   --radius-avatar-md: var(--avatar-radius-md);
   --radius-avatar-lg: var(--avatar-radius-lg);
+  --radius-badge: var(--badge-radius);
   --color-button-primary: var(--button-primary-bg);
   --color-button-primary-hover: var(--button-primary-bg-hover);
   --color-button-primary-pressed: var(--button-primary-bg-pressed);
@@ -275,6 +276,11 @@ body {
   --avatar-radius-sm: 4px;
   --avatar-radius-md: var(--button-radius);
   --avatar-radius-lg: 8px;
+
+  /* Badge — bg/hover/icon colors aren't tokens (they're chosen per-instance
+     from the full Tailwind palette at its fixed 950/900/200 shades, which
+     read the same regardless of app theme), only the radius is. */
+  --badge-radius: 4px;
 
   /* Composer text field — border reuses the sidebar's own right-border
      color (same tone as the sidebar/canvas edge), focus state reuses the

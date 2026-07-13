@@ -1,7 +1,7 @@
 import { Paperclip, MessageSquare, Search, Save, FolderOpen, Zap } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Badge from "./badge/Badge";
 
 const SIGNAL_ICONS = {
   "file attached": Paperclip,
@@ -34,14 +34,11 @@ export default function RoutingPrompt({ data, onConfirm, onDecline }) {
 
           {signals.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {signals.map((s) => {
-                const Icon = SIGNAL_ICONS[s];
-                return (
-                  <Badge key={s} variant="secondary">
-                    {Icon && <Icon />} {s}
-                  </Badge>
-                );
-              })}
+              {signals.map((s) => (
+                <Badge key={s} color="orange" icon={SIGNAL_ICONS[s]}>
+                  {s}
+                </Badge>
+              ))}
             </div>
           )}
 

@@ -1,6 +1,8 @@
-import { Badge } from "@/components/ui/badge";
+import Badge from "./badge/Badge";
 
-const TIER_VARIANTS = { 1: "tier1", 2: "tier2", 3: "tier3" };
+// Traffic-light semantics — matches InputBar's own tier color language
+// (cheap/fast → expensive/heavy).
+const TIER_COLOR = { 1: "green", 2: "amber", 3: "red" };
 const TIER_LABELS = { 1: "T1", 2: "T2", 3: "T3" };
 
 export default function ModelBadge({ tier, model, signals }) {
@@ -9,9 +11,9 @@ export default function ModelBadge({ tier, model, signals }) {
 
   return (
     <Badge
-      variant={TIER_VARIANTS[tier] || "tier1"}
+      color={TIER_COLOR[tier] || "green"}
       title={signals?.length ? `Signals: ${signals.join(", ")}` : `Tier ${tier}`}
-      className="mt-1.5 font-normal"
+      className="mt-1.5"
     >
       <span className="font-mono font-bold tabular-nums">{TIER_LABELS[tier]}</span>
       <span className="opacity-70">·</span>

@@ -3,7 +3,7 @@ import { Paperclip, Search, FolderOpen, MessageSquareText, Pin, Copy, RotateCcw,
 import Bubble from "./bubble/Bubble";
 import ModelBadge from "./ModelBadge";
 import RoutingPrompt from "./RoutingPrompt";
-import { Badge } from "@/components/ui/badge";
+import Badge from "./badge/Badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const formatTimestamp = (iso) => {
@@ -64,8 +64,12 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
                   {m.tools_used && m.tools_used.length > 0 && (
                     <div className="mt-1.5 mb-0.5 flex flex-wrap gap-1">
                       {[...new Set(m.tools_used)].map((t) => (
-                        <Badge key={t} variant="secondary">
-                          {t === "web_search" ? <><Search /> web search</> : t === "file_reader" ? <><FolderOpen /> file reader</> : t}
+                        <Badge
+                          key={t}
+                          color="purple"
+                          icon={t === "web_search" ? Search : t === "file_reader" ? FolderOpen : undefined}
+                        >
+                          {t === "web_search" ? "web search" : t === "file_reader" ? "file reader" : t}
                         </Badge>
                       ))}
                     </div>
@@ -79,13 +83,13 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
                   {m.sources.map((s) => (
                     <Badge
                       key={s.ref_id}
-                      variant="outline"
-                      render={<button type="button" title={s.label} />}
+                      color="pink"
+                      icon={s.type === "fact" ? Pin : MessageSquareText}
                       onClick={() => onJumpToMemory(s.type, s.ref_id)}
-                      className="max-w-[160px] cursor-pointer"
+                      title={s.label}
+                      className="max-w-[160px]"
                     >
-                      {s.type === "fact" ? <Pin /> : <MessageSquareText />}
-                      <span className="truncate">{s.label}</span>
+                      {s.label}
                     </Badge>
                   ))}
                 </div>
