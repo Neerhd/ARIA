@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import Badge from "../badge/Badge";
 import { timeAgo } from "@/lib/time";
 
 export default function ReflectionCard({ reflection }) {
@@ -7,7 +7,7 @@ export default function ReflectionCard({ reflection }) {
     <Card>
       <CardContent>
         <div className="mb-2 flex items-start justify-between">
-          <Badge variant="tier2" className="font-semibold">{reflection.concept}</Badge>
+          <Badge color="indigo" className="font-semibold">{reflection.concept}</Badge>
           <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
             <span title="Source episodes">{reflection.episode_count} ep</span>
             <span>{timeAgo(reflection.created_at)}</span>

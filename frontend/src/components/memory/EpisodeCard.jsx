@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import Badge from "../badge/Badge";
 import { timeAgo } from "@/lib/time";
 
 export default function EpisodeCard({ episode }) {
@@ -12,7 +12,7 @@ export default function EpisodeCard({ episode }) {
         <div className="mb-1.5 flex items-center justify-between">
           <div className="flex flex-wrap gap-1.5">
             {(episode.topics || []).map((t) => (
-              <Badge key={t} variant="tier2">{t}</Badge>
+              <Badge key={t} color="teal">{t}</Badge>
             ))}
           </div>
           <div className="flex shrink-0 items-center gap-2.5">

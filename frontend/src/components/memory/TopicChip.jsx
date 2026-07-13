@@ -1,4 +1,5 @@
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import Badge from "../badge/Badge";
 
 export default function TopicChip({ name, count, projectCount, totalCount, onClick, active }) {
   const label = projectCount != null && totalCount != null
@@ -7,10 +8,9 @@ export default function TopicChip({ name, count, projectCount, totalCount, onCli
 
   return (
     <Badge
-      variant={active ? "tier2" : "outline"}
-      render={<button type="button" />}
+      color="teal"
       onClick={() => onClick(name)}
-      className="cursor-pointer rounded-full"
+      className={cn("rounded-full", !active && "bg-avatar text-avatar-foreground hover:bg-button-clean-hover")}
     >
       {name}
       {label != null && (

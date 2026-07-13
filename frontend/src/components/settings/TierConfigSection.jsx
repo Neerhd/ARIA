@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import Badge from "../badge/Badge";
 
 export default function TierConfigSection({ config }) {
   return (
@@ -17,7 +17,7 @@ export default function TierConfigSection({ config }) {
                 <span className={`text-xs font-bold ${info.available ? "text-foreground" : "text-muted-foreground"}`}>
                   <span className="font-mono tabular-nums">T{tier}</span> · {info.label}
                 </span>
-                <Badge variant={info.available ? "tier1" : "outline"}>
+                <Badge color={info.available ? "green" : "amber"}>
                   {info.available ? "ready" : "not installed"}
                 </Badge>
               </div>
