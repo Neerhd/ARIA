@@ -38,7 +38,7 @@ export default function Bubble({ role, timestamp, actions = [], children, classN
   }, [isUser, children]);
 
   return (
-    <div className={cn("group/bubble flex flex-col", isUser ? "items-end" : "w-full items-stretch")}>
+    <div className={cn("group/bubble flex w-full flex-col", isUser ? "items-end" : "items-stretch")}>
       <div
         ref={isUser ? contentRef : undefined}
         className={cn(

@@ -51,48 +51,46 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
               ];
 
           return (
-            <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-              <Bubble role={m.role} timestamp={isUser ? formatTimestamp(m.created_at) : null} actions={actions}>
-                {m.file_name && (
-                  <div className="mb-1.5 inline-flex items-center gap-1.5 rounded bg-primary-foreground/10 px-2 py-0.5 text-xs">
-                    <Paperclip className="size-3" /> {m.file_name}
-                    {m.truncated && <span className="text-amber-400"> (truncated)</span>}
-                  </div>
-                )}
-                {m.content}
-                {m.role === "assistant" && m.tier && (
-                  <div>
-                    {m.tools_used && m.tools_used.length > 0 && (
-                      <div className="mt-1.5 mb-0.5 flex flex-wrap gap-1">
-                        {[...new Set(m.tools_used)].map((t) => (
-                          <Badge key={t} variant="secondary">
-                            {t === "web_search" ? <><Search /> web search</> : t === "file_reader" ? <><FolderOpen /> file reader</> : t}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <ModelBadge tier={m.tier} model={m.model} signals={m.signals} />
-                  </div>
-                )}
-                {m.sources && m.sources.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-xs text-muted-foreground">Based on:</span>
-                    {m.sources.map((s) => (
-                      <Badge
-                        key={s.ref_id}
-                        variant="outline"
-                        render={<button type="button" title={s.label} />}
-                        onClick={() => onJumpToMemory(s.type, s.ref_id)}
-                        className="max-w-[160px] cursor-pointer"
-                      >
-                        {s.type === "fact" ? <Pin /> : <MessageSquareText />}
-                        <span className="truncate">{s.label}</span>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </Bubble>
-            </div>
+            <Bubble key={m.id} role={m.role} timestamp={isUser ? formatTimestamp(m.created_at) : null} actions={actions}>
+              {m.file_name && (
+                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded bg-primary-foreground/10 px-2 py-0.5 text-xs">
+                  <Paperclip className="size-3" /> {m.file_name}
+                  {m.truncated && <span className="text-amber-400"> (truncated)</span>}
+                </div>
+              )}
+              {m.content}
+              {m.role === "assistant" && m.tier && (
+                <div>
+                  {m.tools_used && m.tools_used.length > 0 && (
+                    <div className="mt-1.5 mb-0.5 flex flex-wrap gap-1">
+                      {[...new Set(m.tools_used)].map((t) => (
+                        <Badge key={t} variant="secondary">
+                          {t === "web_search" ? <><Search /> web search</> : t === "file_reader" ? <><FolderOpen /> file reader</> : t}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <ModelBadge tier={m.tier} model={m.model} signals={m.signals} />
+                </div>
+              )}
+              {m.sources && m.sources.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="text-xs text-muted-foreground">Based on:</span>
+                  {m.sources.map((s) => (
+                    <Badge
+                      key={s.ref_id}
+                      variant="outline"
+                      render={<button type="button" title={s.label} />}
+                      onClick={() => onJumpToMemory(s.type, s.ref_id)}
+                      className="max-w-[160px] cursor-pointer"
+                    >
+                      {s.type === "fact" ? <Pin /> : <MessageSquareText />}
+                      <span className="truncate">{s.label}</span>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </Bubble>
           );
         })}
 
