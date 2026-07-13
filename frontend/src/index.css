@@ -105,6 +105,11 @@ body {
   --color-bubble: var(--bubble-background);
   --color-bubble-foreground: var(--bubble-foreground);
   --radius-bubble: var(--bubble-radius);
+  --color-avatar: var(--avatar-background);
+  --color-avatar-foreground: var(--avatar-foreground);
+  --radius-avatar-sm: var(--avatar-radius-sm);
+  --radius-avatar-md: var(--avatar-radius-md);
+  --radius-avatar-lg: var(--avatar-radius-lg);
   --color-button-primary: var(--button-primary-bg);
   --color-button-primary-hover: var(--button-primary-bg-hover);
   --color-button-primary-pressed: var(--button-primary-bg-pressed);
@@ -260,6 +265,17 @@ body {
      language across bubble and input. */
   --bubble-radius: var(--sidebar-radius-lg);
 
+  /* Avatar — fill reuses the app's standard neutral hover tone (same value
+     as button-clean-bg-hover), overridden in .dark like --bubble-background
+     for the same reason (too close to the pure-black chrome otherwise).
+     Foreground reuses sidebar-item-hover-foreground, which already flips
+     correctly between light/dark on its own. */
+  --avatar-background: var(--button-clean-bg-hover);
+  --avatar-foreground: var(--sidebar-item-hover-foreground);
+  --avatar-radius-sm: 4px;
+  --avatar-radius-md: var(--button-radius);
+  --avatar-radius-lg: 8px;
+
   /* Composer text field — border reuses the sidebar's own right-border
      color (same tone as the sidebar/canvas edge), focus state reuses the
      sidebar item's exact focus ring, radius reuses the sidebar's largest
@@ -332,6 +348,10 @@ body {
      --bubble-foreground stays aliased to button-secondary-fg (white),
      which still contrasts fine against this lighter gray. */
   --bubble-background: #262626;
+
+  /* Same reasoning as --bubble-background above — button-clean-bg-hover
+     (#171717) is too close to pure black to read as a fill. */
+  --avatar-background: #262626;
 }
 
 @layer base {

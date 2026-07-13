@@ -7,6 +7,7 @@ import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
 import Button from "./components/button/Button";
 import Tooltip from "./components/tooltip/Tooltip";
+import Avatar from "./components/avatar/Avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
 import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned } from "./services/api";
@@ -342,9 +343,7 @@ export default function App() {
     },
   ];
 
-  const sidebarLogo = (
-    <img src="/aria-logo.png" alt="ARIA" className="size-6 shrink-0 rounded-sidebar-sm" />
-  );
+  const sidebarLogo = <Avatar variant="content" src="/aria-logo.png" alt="ARIA" size="m" shape="rounded" />;
 
   // Global shortcuts for New Chat/Graph/Memory — Search stays visual-only
   // until it's actually implemented. Surfaced only via the collapsed
