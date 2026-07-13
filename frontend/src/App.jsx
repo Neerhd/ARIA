@@ -272,8 +272,11 @@ export default function App() {
 
   // Retry re-sends the user text behind a message — for a user bubble that's
   // its own content, for an assistant reply it's the nearest preceding user
-  // message (attachments aren't retried, only the text).
-  const handleRetryMessage = (message) => {
+  // message (attachments aren't retried, only the text). An explicit tier
+  // (from RetryTierMenu, assistant replies only) forces that one resend via
+  // the same one-shot override_tier the ask-mode confirm/decline flow uses —
+  // it's not sticky, the next message classifies fresh as normal.
+  const handleRetryMessage = (message, tier) => {
     if (loading) return;
     const userText =
       message.role === "user"
@@ -283,7 +286,7 @@ export default function App() {
             .reverse()
             .find((m) => m.role === "user")?.content;
     if (!userText) return;
-    _doSend(userText, null, null, false, null, conversationId);
+    _doSend(userText, null, null, false, tier ?? null, conversationId);
   };
 
   // Drops a sent message's text back into the composer for editing — see

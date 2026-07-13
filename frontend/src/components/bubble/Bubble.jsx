@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
  * box once the box gets taller than it is round. ARIA replies render with
  * no fill at all. Both reveal a row of small "clean" icon buttons
  * underneath on hover/focus — `actions` is the same {icon, label, onClick}
- * shape Sidebar item actions already use.
+ * shape Sidebar item actions already use. An action can pass `render`
+ * (a node) instead of icon/onClick when it needs more than a single click
+ * (e.g. a tier-choice menu) — Bubble just slots it in at that position.
  */
 export default function Bubble({ role, timestamp, actions = [], children, className }) {
   const isUser = role === "user";
@@ -63,11 +65,15 @@ export default function Bubble({ role, timestamp, actions = [], children, classN
           {isUser && timestamp && (
             <span className="font-sidebar mr-1 text-xs text-muted-foreground">{timestamp}</span>
           )}
-          {actions.map(({ icon, label, onClick }) => (
-            <Tooltip key={label} label={label} side="bottom">
-              <Button variant="clean" size="small" icon={icon} onClick={onClick} aria-label={label} />
-            </Tooltip>
-          ))}
+          {actions.map(({ icon, label, onClick, render }) =>
+            render ? (
+              <span key={label}>{render}</span>
+            ) : (
+              <Tooltip key={label} label={label} side="bottom">
+                <Button variant="clean" size="small" icon={icon} onClick={onClick} aria-label={label} />
+              </Tooltip>
+            )
+          )}
         </div>
       )}
     </div>

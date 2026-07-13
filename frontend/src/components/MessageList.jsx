@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Paperclip, Search, FolderOpen, MessageSquareText, Pin, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal } from "lucide-react";
+import { Paperclip, MessageSquareText, Pin, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal } from "lucide-react";
 import Bubble from "./bubble/Bubble";
-import ModelBadge from "./ModelBadge";
+import Markdown from "./bubble/Markdown";
+import RetryTierMenu from "./bubble/RetryTierMenu";
 import RoutingPrompt from "./RoutingPrompt";
 import Badge from "./badge/Badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -36,6 +37,10 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
           }
 
           const isUser = m.role === "user";
+          // Tool-used and tier badges are intentionally not surfaced here —
+          // that's metadata, not something needed on every reply. Retrying
+          // at a specific tier (RetryTierMenu) covers the one thing tier
+          // actually matters for day to day.
           const actions = isUser
             ? [
                 { icon: RotateCcw, label: "Retry", onClick: () => onRetryMessage(m) },
@@ -45,7 +50,7 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
             : [
                 { icon: Copy, label: "Copy", onClick: () => copyToClipboard(m.content) },
                 { icon: Share, label: "Share", onClick: () => {} },
-                { icon: RotateCcw, label: "Retry", onClick: () => onRetryMessage(m) },
+                { label: "Retry", render: <RetryTierMenu onRetry={(tier) => onRetryMessage(m, tier)} /> },
                 { icon: Download, label: "Download", onClick: () => {} },
                 { icon: MoreHorizontal, label: "More", onClick: () => {} },
               ];
@@ -58,32 +63,14 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
                   {m.truncated && <span className="text-amber-400"> (truncated)</span>}
                 </div>
               )}
-              {m.content}
-              {m.role === "assistant" && m.tier && (
-                <div>
-                  {m.tools_used && m.tools_used.length > 0 && (
-                    <div className="mt-1.5 mb-0.5 flex flex-wrap gap-1">
-                      {[...new Set(m.tools_used)].map((t) => (
-                        <Badge
-                          key={t}
-                          color="purple"
-                          icon={t === "web_search" ? Search : t === "file_reader" ? FolderOpen : undefined}
-                        >
-                          {t === "web_search" ? "web search" : t === "file_reader" ? "file reader" : t}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <ModelBadge tier={m.tier} model={m.model} signals={m.signals} />
-                </div>
-              )}
+              {isUser ? m.content : <Markdown>{m.content}</Markdown>}
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
                   <span className="text-xs text-muted-foreground">Based on:</span>
                   {m.sources.map((s) => (
                     <Badge
                       key={s.ref_id}
-                      color="pink"
+                      color="neutral"
                       icon={s.type === "fact" ? Pin : MessageSquareText}
                       onClick={() => onJumpToMemory(s.type, s.ref_id)}
                       title={s.label}
