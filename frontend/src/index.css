@@ -193,7 +193,14 @@ body {
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0;
+  /* Base for Tailwind's default rounded-sm/md/lg/xl/2xl/3xl/4xl scale — was
+     0 (every shadcn primitive and any plain `rounded`/`rounded-lg`/etc.
+     class in the app rendered perfectly square). Design-system components
+     (Button, Sidebar, Bubble, Avatar, Badge, Input) all define their own
+     dedicated radius tokens above and are unaffected either way; this only
+     fixes everything still on the generic scale. 10px sits consistently
+     within that component-level range (avatar-lg 8px, sidebar-lg 12px). */
+  --radius: 0.625rem;
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.556 0 0);
   --sidebar-primary: oklch(0.205 0 0);
