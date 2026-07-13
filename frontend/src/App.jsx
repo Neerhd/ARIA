@@ -176,6 +176,7 @@ export default function App() {
       file_name: fileName,
       truncated,
       conversation_id: targetConvoId,
+      created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
     setLoading(true);
@@ -262,6 +263,27 @@ export default function App() {
 
     await _doSend(text, fileContent, fileName, truncated, overrideTier, pendingConvoId);
   };
+
+  // Retry re-sends the user text behind a message — for a user bubble that's
+  // its own content, for an assistant reply it's the nearest preceding user
+  // message (attachments aren't retried, only the text).
+  const handleRetryMessage = (message) => {
+    if (loading) return;
+    const userText =
+      message.role === "user"
+        ? message.content
+        : messages
+            .slice(0, messages.indexOf(message))
+            .reverse()
+            .find((m) => m.role === "user")?.content;
+    if (!userText) return;
+    _doSend(userText, null, null, false, null, conversationId);
+  };
+
+  // Drops a sent message's text back into the composer for editing — see
+  // InputBar's prefillKey effect.
+  const [editDraft, setEditDraft] = useState(null);
+  const handleEditMessage = (message) => setEditDraft({ text: message.content, key: Date.now() });
 
   // The "More" menu (Edit / Delete) is deferred entirely — no dropdown
   // built yet, just the icon.
@@ -448,21 +470,29 @@ export default function App() {
                 loading={loading}
                 onRoutingDecision={handleRoutingDecision}
                 onJumpToMemory={handleJumpToMemory}
+                onRetryMessage={handleRetryMessage}
+                onEditMessage={handleEditMessage}
               />
               {error && (
-                <Alert variant="destructive" className="mx-5 mb-2">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
+                <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+                  <Alert variant="destructive" className="mb-2">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                </div>
               )}
-              <div className="px-5 pt-2 pb-4">
-                <InputBar
-                  onSend={handleSend}
-                  disabled={loading}
-                  routingMode={routingMode}
-                  conversationTier={conversationTier}
-                  onTierChange={setConversationTier}
-                  isFollowUp={messages.length > 0}
-                />
+              <div className="px-4 pt-2 pb-4 sm:px-6">
+                <div className="mx-auto w-full max-w-3xl">
+                  <InputBar
+                    onSend={handleSend}
+                    disabled={loading}
+                    routingMode={routingMode}
+                    conversationTier={conversationTier}
+                    onTierChange={setConversationTier}
+                    isFollowUp={messages.length > 0}
+                    prefillText={editDraft?.text}
+                    prefillKey={editDraft?.key}
+                  />
+                </div>
               </div>
             </>
           )}

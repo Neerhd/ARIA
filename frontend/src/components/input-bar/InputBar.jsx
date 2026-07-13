@@ -21,7 +21,7 @@ const TIER_TEXT_COLOR = {
  * docked); this component only owns the field and its row of controls.
  * Pill-shaped while single-line, relaxing to rounded-input once it grows.
  */
-export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, isFollowUp = false }) {
+export default function InputBar({ onSend, disabled, routingMode, conversationTier, onTierChange, isFollowUp = false, prefillText, prefillKey }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   const [isMultiline, setIsMultiline] = useState(false);
@@ -63,6 +63,15 @@ export default function InputBar({ onSend, disabled, routingMode, conversationTi
   useEffect(() => {
     updateThumb();
   }, [text, updateThumb]);
+
+  // Editing a sent message drops its text back into the composer — keyed on
+  // prefillKey (not prefillText) so re-editing the same message still refires.
+  useEffect(() => {
+    if (prefillKey == null) return;
+    setText(prefillText || "");
+    textareaRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillKey]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

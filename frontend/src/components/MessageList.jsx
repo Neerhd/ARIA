@@ -1,20 +1,28 @@
 import { useEffect, useRef } from "react";
-import { Paperclip, Search, FolderOpen, MessageSquareText, Pin } from "lucide-react";
+import { Paperclip, Search, FolderOpen, MessageSquareText, Pin, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal } from "lucide-react";
+import Bubble from "./bubble/Bubble";
 import ModelBadge from "./ModelBadge";
 import RoutingPrompt from "./RoutingPrompt";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export default function MessageList({ messages, loading, onRoutingDecision, onJumpToMemory }) {
+const formatTimestamp = (iso) => {
+  if (!iso) return null;
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+};
+
+export default function MessageList({ messages, loading, onRoutingDecision, onJumpToMemory, onRetryMessage, onEditMessage }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const copyToClipboard = (text) => navigator.clipboard.writeText(text || "");
+
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className="flex flex-col gap-4 px-6 py-5">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-5 sm:px-6">
         {messages.map((m) => {
           if (m.role === "routing") {
             return (
@@ -27,18 +35,26 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
             );
           }
 
+          const isUser = m.role === "user";
+          const actions = isUser
+            ? [
+                { icon: RotateCcw, label: "Retry", onClick: () => onRetryMessage(m) },
+                { icon: Copy, label: "Copy", onClick: () => copyToClipboard(m.content) },
+                { icon: Pencil, label: "Edit", onClick: () => onEditMessage(m) },
+              ]
+            : [
+                { icon: Copy, label: "Copy", onClick: () => copyToClipboard(m.content) },
+                { icon: Share, label: "Share", onClick: () => {} },
+                { icon: RotateCcw, label: "Retry", onClick: () => onRetryMessage(m) },
+                { icon: Download, label: "Download", onClick: () => {} },
+                { icon: MoreHorizontal, label: "More", onClick: () => {} },
+              ];
+
           return (
-            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`max-w-[72%] rounded-xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                  m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground ring-1 ring-border"
-                }`}
-              >
-                {m.role === "assistant" && (
-                  <div className="mb-1 text-[10px] font-bold text-muted-foreground">ARIA</div>
-                )}
+            <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+              <Bubble role={m.role} timestamp={isUser ? formatTimestamp(m.created_at) : null} actions={actions}>
                 {m.file_name && (
-                  <div className="mb-1.5 inline-flex items-center gap-1.5 rounded bg-primary-foreground/10 px-2 py-0.5 text-[11px]">
+                  <div className="mb-1.5 inline-flex items-center gap-1.5 rounded bg-primary-foreground/10 px-2 py-0.5 text-xs">
                     <Paperclip className="size-3" /> {m.file_name}
                     {m.truncated && <span className="text-amber-400"> (truncated)</span>}
                   </div>
@@ -60,7 +76,7 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
                 )}
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] text-muted-foreground">Based on:</span>
+                    <span className="text-xs text-muted-foreground">Based on:</span>
                     {m.sources.map((s) => (
                       <Badge
                         key={s.ref_id}
@@ -75,7 +91,7 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
                     ))}
                   </div>
                 )}
-              </div>
+              </Bubble>
             </div>
           );
         })}

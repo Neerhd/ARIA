@@ -102,6 +102,9 @@ body {
   --color-tooltip-border: var(--tooltip-border);
   --color-tooltip-foreground: var(--tooltip-foreground);
   --color-tooltip-muted-foreground: var(--tooltip-muted-foreground);
+  --color-bubble: var(--bubble-background);
+  --color-bubble-foreground: var(--bubble-foreground);
+  --radius-bubble: var(--bubble-radius);
   --color-button-primary: var(--button-primary-bg);
   --color-button-primary-hover: var(--button-primary-bg-hover);
   --color-button-primary-pressed: var(--button-primary-bg-pressed);
@@ -242,6 +245,18 @@ body {
   --button-clean-fg: #0d0d0d;
   --button-clean-fg-pressed: #0d0d0d;
   --button-clean-fg-disabled: #969696;
+
+  /* User message bubble — same fill/text pair as the secondary button's
+     enabled state, referenced via var() so both stay in sync automatically.
+     Not re-declared in .dark for the same reason as sidebar-item-hover above. */
+  --bubble-background: var(--button-secondary-bg);
+  --bubble-foreground: var(--button-secondary-fg);
+  /* Radius once the bubble wraps past one line — rounded-full stops reading
+     as "pill" and starts reading as a squared-off box once height grows, so
+     Bubble.jsx measures wrap state in JS and swaps to this fixed radius.
+     Reuses the composer's own multiline radius for a consistent shape
+     language across bubble and input. */
+  --bubble-radius: var(--sidebar-radius-lg);
 
   /* Composer text field — border reuses the sidebar's own right-border
      color (same tone as the sidebar/canvas edge), focus state reuses the
