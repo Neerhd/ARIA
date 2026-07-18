@@ -25,16 +25,7 @@ else
 fi
 PYTHON=$(brew --prefix)/bin/python3.12
 
-# ─── 3. Ollama ────────────────────────────────────────────────────────────────
-# Use --cask (the full macOS app) — the formula-only install is missing llama-server
-if ! command -v ollama &>/dev/null; then
-  echo "📦  Installing Ollama (macOS app)..."
-  brew install --cask ollama
-else
-  echo "✅  Ollama already installed"
-fi
-
-# ─── 4. Neo4j ─────────────────────────────────────────────────────────────────
+# ─── 3. Neo4j ─────────────────────────────────────────────────────────────────
 if ! brew list neo4j &>/dev/null; then
   echo "📦  Installing Neo4j Community Edition..."
   brew install neo4j
@@ -117,19 +108,14 @@ else
   echo "✅  SearXNG settings already present"
 fi
 
-# ─── 8. Pull Ollama model ─────────────────────────────────────────────────────
 echo ""
-echo "🤖  Starting Ollama and pulling llama3.2:3b model..."
-echo "    (This is ~2 GB — may take a few minutes on first run)"
-ollama serve &>/dev/null &
-OLLAMA_PID=$!
-sleep 4
-ollama pull llama3.2:3b
-kill $OLLAMA_PID 2>/dev/null || true
-
-echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║   ✅  ARIA installation complete!         ║"
-echo "║   Run: ./scripts/start.sh                ║"
-echo "╚══════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║   ✅  ARIA installation complete!                         ║"
+echo "║   Run: ./scripts/start.sh                                ║"
+echo "║                                                          ║"
+echo "║   ARIA needs an API key from at least one AI provider    ║"
+echo "║   (Anthropic, OpenAI, Google, xAI, or Perplexity).       ║"
+echo "║   Paste it into the welcome screen on first launch,      ║"
+echo "║   or set it in .env (e.g. ANTHROPIC_API_KEY=...).        ║"
+echo "╚══════════════════════════════════════════════════════════╝"
 echo ""

@@ -1,8 +1,8 @@
 # ARIA — Adaptive Reasoning Intelligence Assistant
 
-**A self-hosted, privacy-first personal AI that learns, grows, and evolves with you over time.**
+**A self-hosted personal AI that learns, grows, and evolves with you over time.**
 
-ARIA runs entirely on your own hardware. No subscriptions. No data sent to the cloud. No conversation history stored on someone else's server. Everything — the model, the memory, the chat history — lives on your machine.
+ARIA's memory, chat history, and knowledge graph live entirely on your machine — no conversation history stored on someone else's server, no subscriptions. Model inference runs through AI providers you connect with your own pay-per-use API keys (Anthropic, OpenAI, Google, xAI, Perplexity — any one is enough to start), and a task-based router picks the right model for each message.
 
 > Inspired by [Pewdiepie's Odysseus project](https://github.com/pewdiepie-archdaemon/odysseus). ARIA borrows the modular architecture and replaces the flat vector memory system with a novel graph-based memory that mirrors how human memory actually works.
 
@@ -10,7 +10,7 @@ ARIA runs entirely on your own hardware. No subscriptions. No data sent to the c
 
 ## What makes ARIA different
 
-Most self-hosted AI tools are just a chat interface pointed at a local model. ARIA is designed to be something more: a system that gets smarter the longer you use it — not because the model improves, but because it *knows you better*.
+Most self-hosted AI tools are just a chat interface pointed at a model. ARIA is designed to be something more: a system that gets smarter the longer you use it — not because the model improves, but because it *knows you better*.
 
 | Feature | Standard RAG tools | ARIA |
 |---|---|---|
@@ -18,10 +18,10 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 | Learning | None — resets every session | Episodic → Semantic consolidation |
 | Transparency | Black box — no way to see why it said something | Inline citations on every memory-informed reply, plus a natural-language query tool over the graph itself |
 | Organization | One flat history | Multi-project scoping — conversations and episodic memory partitioned per project, topics stay connected across them |
-| Model routing | One model for everything | 3-tier router (fast/capable/cloud) |
+| Model routing | One model for everything | Multi-provider, task-based routing — each kind of task answered by the model you assign to it |
 | File access | Varies | Built-in — attach any file in chat |
-| Privacy | Depends on setup | 100% local by design |
-| Cost | Often subscription-based | Free after hardware |
+| Privacy | Depends on setup | Memory, history, and graph 100% local; model inference via your own provider API keys |
+| Cost | Often subscription-based | Pay-per-use API metering with a built-in cost tracker — no subscription |
 
 ---
 
@@ -47,18 +47,18 @@ Most self-hosted AI tools are just a chat interface pointed at a local model. AR
 │  └─────────────────────────────────────────────────────────────┘  │
 └──────┬─────────────────┬──────────────────┬────────────────────────┘
        │                 │                  │
-┌──────▼──────┐  ┌───────▼──────┐  ┌────────▼──────────────────┐
-│   Ollama    │  │   SQLite     │  │      Memory Layer          │
-│ T1 llama3.2 │  │ Projects     │  │  ChromaDB (semantic,       │
-│ T2 qwen2.5  │  │ Conversations│  │   project-scoped)          │
-│   :11434    │  │ Messages     │  │  Neo4j (knowledge graph)   │
-└─────────────┘  │ Routing log  │  │  Episodes (project-scoped) │
-                 └──────────────┘  │  Concepts (global hubs)    │
-┌─────────────┐                    │  Reflections · Facts       │
-│  Anthropic  │                    │  :7687                     │
-│   Claude    │  ← T3 (tools,      └────────────────────────────┘
-│  (cloud)    │     complex tasks, reasoning)
-└─────────────┘
+┌──────▼──────────┐  ┌───▼──────────┐  ┌────▼──────────────────────┐
+│  AI Providers   │  │   SQLite     │  │      Memory Layer          │
+│  (your keys)    │  │ Projects     │  │  ChromaDB (semantic,       │
+│  Anthropic      │  │ Conversations│  │   project-scoped)          │
+│  OpenAI         │  │ Messages     │  │  Neo4j (knowledge graph)   │
+│  Google         │  │ Routing log  │  │  Episodes (project-scoped) │
+│  xAI            │  │ Usage log    │  │  Concepts (global hubs)    │
+│  Perplexity     │  └──────────────┘  │  Reflections · Facts       │
+└─────────────────┘                    │  :7687                     │
+  ↑ task-role router picks the         └────────────────────────────┘
+    model per message (Auto) or
+    you pick it yourself (Manual)
 ```
 
 ### Memory system
@@ -75,7 +75,7 @@ ARIA's memory is built on a knowledge graph, not flat vector storage. Memories a
 **Memory pipeline (currently active):**
 
 1. **Write** — Every assistant reply is stored as an Episode node in Neo4j (shared ID with ChromaDB and SQLite)
-2. **Extract** — Topic tags are extracted from each turn using the local model; Concept nodes are created or incremented
+2. **Extract** — Topic tags are extracted from each turn using the default provider's budget model; Concept nodes are created or incremented
 3. **Link** — Episodes are connected to their Concepts (`DISCUSSES`) and to the previous episode in the conversation (`NEXT`)
 4. **Recall** — ChromaDB semantic search finds relevant past episodes before each response
 5. **Reinforce** — Recalled episodes have their `recall_count` incremented in Neo4j
@@ -122,7 +122,7 @@ This surfaces retrieval that already happens on every turn (ChromaDB semantic re
 | M2 | Core Chat | Multi-turn chat, file attachments, session persistence | ✅ Complete |
 | M3 | Memory Layer v1 | Episodic memory capture, topic extraction, knowledge graph | ✅ Complete |
 | M4 | Consolidation Pipeline | Reflection synthesis, nightly scheduler, memory browser UI | ✅ Complete |
-| M5 | Model Router | 3-tier action-based router, three modes, tier badges, routing logged | ✅ Complete |
+| M5 | Model Router | 3-tier action-based router, three modes, tier badges, routing logged | ✅ Superseded by M15 |
 | M6 | Tools + Permanent Memory | Web search, file reader/writer, multi-format export, pinned facts | ✅ Complete |
 | M7 | MVP Testing | End-to-end testing, memory pattern validation | Planned |
 | M8 | MVP Complete | Stable system, ready for Phase 2 | Planned |
@@ -132,6 +132,7 @@ This surfaces retrieval that already happens on every turn (ChromaDB semantic re
 | M12 | 3D Knowledge Graph Visualizer | Interactive force-directed 3D graph of Episodes/Concepts/Reflections, click-to-focus, project/all-projects toggle | ✅ Complete |
 | M13 | Chat With The Graph | Natural-language querying of the memory graph via a fourth agent tool — read-only, enforced at the Neo4j transaction level | ✅ Complete |
 | M14 | Inline Memory Provenance | "Based on:" citations on memory-informed replies, click-through to Memory Browser | ✅ Complete |
+| M15 | Multi-Provider Model Router | Five cloud providers behind one adapter layer, task-role classification, per-role model assignment, manual per-message picker, in-app API key management, cost tracking. Replaces the M5 local tiers; Ollama removed | ✅ Complete |
 
 ---
 
@@ -140,8 +141,9 @@ This surfaces retrieval that already happens on every turn (ChromaDB semantic re
 - **macOS with Apple Silicon** (M1/M2/M3/M4) — tested on Mac Mini
 - **Homebrew** — [install here](https://brew.sh)
 - **Node.js 18+** — `brew install node`
+- **An API key from at least one AI provider** — Anthropic, OpenAI, Google, xAI, or Perplexity. Pay-per-use, no subscription; typical light use costs a few dollars a month. You can paste the key into ARIA's first-run screen after starting — no file editing required.
 
-Everything else (Python 3.12, Ollama, Neo4j, and all packages) is installed automatically by the setup script.
+Everything else (Python 3.12, Neo4j, and all packages) is installed automatically by the setup script.
 
 ---
 
@@ -169,10 +171,10 @@ bash scripts/install.sh
 ```
 
 This will:
-- Install Python 3.12, Ollama (macOS app), and Neo4j via Homebrew
+- Install Python 3.12 and Neo4j via Homebrew
 - Create a Python virtual environment and install all packages
 - Install all frontend npm packages
-- Pull the `llama3.2:3b` model (~2 GB — takes a few minutes on first run)
+- Set up SearXNG (self-hosted web search)
 
 ### 4. Set your Neo4j password
 
@@ -191,7 +193,7 @@ On first run, you need to set a Neo4j password:
 bash scripts/start.sh
 ```
 
-Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+Open **[http://localhost:5173](http://localhost:5173)** in your browser. On first launch ARIA shows a welcome screen: pick a provider, follow the link to create an API key, paste it in — the key is verified live before you continue. (Alternatively, set a key in `.env`, e.g. `ANTHROPIC_API_KEY=…`.)
 
 ### Stop ARIA
 
@@ -234,17 +236,20 @@ ARIA/
 │   │   ├── neo4j_client.py     # Neo4j async driver
 │   │   └── chroma_client.py    # ChromaDB persistent client
 │   ├── models/
-│   │   └── schemas.py          # ORM models (Project, Conversation, Message, ConsolidationRun, RoutingLog)
+│   │   └── schemas.py          # ORM models (Project, Conversation, Message, ConsolidationRun, RoutingLog, UsageLog)
 │   └── services/
 │       ├── consolidation_service.py  # Reflection synthesis pipeline (per-project clustering)
 │       ├── file_service.py           # PDF and text extraction (PyMuPDF)
 │       ├── graph_service.py          # All Neo4j read/write operations
 │       ├── graph_query_service.py    # NL-to-Cypher generation + read-only execution (M13)
+│       ├── key_store.py              # Runtime provider API keys (added via Settings UI) (M15)
 │       ├── memory_service.py         # ChromaDB store and semantic search (project-scoped)
-│       ├── ollama_service.py         # Ollama chat and health check
 │       ├── project_service.py        # Default-project resolution (M10)
-│       ├── router_service.py         # Tier classification, Ollama + Anthropic + OpenAI dispatch
+│       ├── role_service.py           # Task-role definitions + role→model assignments (M15)
+│       ├── role_classifier_service.py # Budget-model message classification for Auto mode (M15)
+│       ├── router_service.py         # Provider registry + Anthropic/OpenAI-compatible adapters (M15)
 │       ├── tool_service.py           # Tool definitions, executors, agentic loop, format writers
+│       ├── usage_service.py          # Token/cost tracking with background writer (M15)
 │       ├── web_search_service.py     # SearXNG wrapper
 │       └── topic_service.py          # Topic tag extraction from conversations
 ├── frontend/
@@ -256,18 +261,17 @@ ARIA/
 │       ├── main.jsx            # Entry point
 │       ├── index.css           # M9 design tokens — OKLCH grayscale palette, radius 0, Geist fonts
 │       ├── components/
+│       │   ├── FirstRunSetup.jsx   # Welcome screen when no provider key exists yet (M15)
 │       │   ├── GraphView.jsx       # 3D force-directed graph (react-three-fiber) (M12)
 │       │   ├── ProjectSwitcher.jsx # Project list/create/rename/delete (M10)
-│       │   ├── InputBar.jsx        # Chat input, file attachment, tier selector
+│       │   ├── InputBar.jsx        # Chat input, file attachment, manual-mode model picker
 │       │   ├── MemoryBrowser.jsx   # Pinned/Episodes/Concepts/Reflections panel
-│       │   ├── MessageList.jsx     # Message thread, tier badges, tool badges, provenance citations
-│       │   ├── ModelBadge.jsx      # T1/T2/T3 badge on every assistant message
-│       │   ├── RoutingPrompt.jsx   # Ask-mode permission card in chat thread
-│       │   ├── RouterSettings.jsx  # Settings overlay — mode selector, tools, tier info
+│       │   ├── MessageList.jsx     # Message thread, retry-with-model menu, provenance citations
+│       │   ├── RouterSettings.jsx  # Settings sheet — routing mode, usage, roles, providers
 │       │   ├── Sidebar.jsx         # Conversation list, filtered to the active project
 │       │   ├── StatusBar.jsx       # Live service health dots
 │       │   ├── memory/             # Memory Browser tab contents (one file per tab + shared cards)
-│       │   ├── settings/           # Settings sheet sections (routing mode, tools, tier config)
+│       │   ├── settings/           # Settings sheet sections (mode, usage, role assignments, provider keys)
 │       │   └── ui/                 # shadcn/ui primitives (Badge, Sheet, Tabs, AlertDialog, ScrollArea, Table, …)
 │       ├── hooks/
 │       │   ├── useMemoryBrowser.js # Memory Browser data fetching + tab/filter state
@@ -307,33 +311,47 @@ Say **"remember this"**, **"save this"**, **"don't forget"**, or **"note that"**
 
 ## Model Router
 
-ARIA has a three-tier model system. The router automatically picks the right model based on what you are doing, and every response shows a coloured badge (T1/T2/T3) so you always know which model answered.
+ARIA routes each message by **what kind of task it is**, across five supported providers — Anthropic (Claude), OpenAI (GPT), Google (Gemini), xAI (Grok), and Perplexity. Connect any subset with your own API keys; the first configured provider becomes the default, and every unassigned role follows it automatically.
 
-| Tier | Default model | When it runs |
+### Task roles
+
+In **Auto** mode, a small budget-model call (a fraction of a cent) classifies each message into one of six roles, and the message is answered by whatever model you've assigned to that role in **Settings → Task Roles**:
+
+| Role | Covers | Default assignment |
 |---|---|---|
-| **T1** | `llama3.2:3b` (local, ~2 GB) | Default — fast responses for casual chat and simple questions |
-| **T2** | `qwen2.5:14b` (local, ~9 GB) | File attached, or conversation exceeds 15 messages |
-| **T3** | `claude-sonnet-4-6` (cloud) | Any tool enabled (web search, file reader/writer, query the graph), or manually selected |
+| **Quick Chat** | Casual conversation, greetings, quick questions | Default provider's budget model |
+| **Coding** | Writing, debugging, reviewing, explaining code | Default provider's main model |
+| **Research** | Questions needing current/web information | Default provider's main model (+ web_search tool) |
+| **Calculation & Reasoning** | Math, logic, step-by-step analysis | Default provider's main model |
+| **Creative Writing** | Stories, poems, copywriting, brainstorming | Default provider's main model |
+| **Agentic & Tools** | File reading/writing, document export, memory queries | Default provider's main model |
 
-T3 auto-activates whenever a tool is enabled because local models do not reliably generate structured tool calls. T3 requires `TIER3_API_KEY` in `.env`.
+If classification ever fails, the message falls back to the default model — a routing hiccup can never block a reply.
 
 ### Routing modes
 
-Click **Settings** in the top-right corner to choose how the router behaves:
-
 | Mode | Behaviour |
 |---|---|
-| **Auto** *(default)* | System upgrades silently when it detects a heavier task. You see which tier responded via the badge. |
-| **Ask** | System detects when an upgrade is warranted and shows a permission card in the chat before switching. You approve or decline. |
-| **Manual** | T1/T2/T3 selector appears in the input bar. You set the tier for the whole conversation. |
+| **Auto** *(default)* | Classify each message into a task role, answer with that role's assigned model. |
+| **Manual** | Model pills appear above the chat input — pick one and every message goes to it; deselect to fall back to the default model. |
 
-Every routing decision is logged to the `routing_logs` SQLite table with the mode, classified tier, actual tier, model used, and the signals that triggered the classification.
+Any reply's **Retry** button also opens a model menu ("Auto" + every available model) for a one-shot second opinion from a different AI.
+
+### API keys
+
+Keys are managed in **Settings → AI Providers** (or via `.env`). Pasted keys are verified with a live request before being accepted, and stored locally with owner-only file permissions. Providers without keys simply appear as "no key" — nothing breaks. Perplexity can't drive tools (no function calling), so it's best assigned to Research.
+
+### Cost tracking
+
+Every AI call — replies, message routing, memory upkeep — is logged with token counts and an estimated cost. **Settings → Usage** shows the last 7 days: total, per-day, and per-activity. Estimates come from public per-token prices; check your provider's console for exact billing.
+
+Every routing decision is also logged to the `routing_logs` SQLite table with the mode, classified role, and model used.
 
 ---
 
 ## Tools
 
-Enable tools in **Settings → Tools**. Enabling any tool automatically routes the request to T3 (Claude Sonnet) for reliable agentic execution.
+Tools are always available — the model decides per message whether one is relevant (a message needing file access typically classifies as **Agentic & Tools** and routes accordingly).
 
 | Tool | What it does | Notes |
 |---|---|---|
@@ -386,17 +404,17 @@ All configuration lives in `.env`. Key values:
 | `SQLITE_DB_PATH` | `./data/sqlite/aria.db` | Path to the conversation database |
 | `CHROMA_DB_PATH` | `./data/chroma` | Path to the vector memory store |
 
-**Model tiers**
+**AI providers**
 
-| Variable | Default | Description |
-|---|---|---|
-| `TIER1_MODEL` | `llama3.2:3b` | Fast local model — casual chat, quick questions |
-| `TIER2_MODEL` | `qwen2.5:14b` | Capable local model — file analysis, long conversations |
-| `TIER3_MODEL` | `claude-sonnet-4-6` | Cloud model name |
-| `TIER3_API_KEY` | *(empty)* | API key for Tier 3. For Claude: get a key at [console.anthropic.com](https://console.anthropic.com). Leave empty to disable cloud. |
-| `TIER3_BASE_URL` | `https://api.anthropic.com/v1` | Base URL. Set to `https://generativelanguage.googleapis.com/v1beta/openai/` to use Gemini instead. |
+| Variable | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
+| `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com) |
+| `GOOGLE_API_KEY` | [aistudio.google.com](https://aistudio.google.com) |
+| `XAI_API_KEY` | [console.x.ai](https://console.x.ai) |
+| `PERPLEXITY_API_KEY` | [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api) |
 
-Tier 3 is disabled by default. ARIA works fully offline with just Tier 1 and Tier 2.
+At least one key is required for chat. Keys can also be added (and verified live) in **Settings → AI Providers** — keys added there are stored in `backend/data/provider_keys.json` and take precedence over `.env`. The first configured provider (in the order above) becomes the default.
 
 ---
 
@@ -458,8 +476,14 @@ All endpoints below require `?project_id=` (Concepts are returned globally but a
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/router/config` | Tier models, types, availability status, and descriptions |
-| `GET` | `/router/logs` | Recent routing decisions with signals (`?limit=`) |
+| `GET` | `/router/config` | Providers with model catalogs, key status, and the current default |
+| `PUT` | `/router/providers/{id}/key` | Store a provider API key (verified with a live request before accepting) |
+| `DELETE` | `/router/providers/{id}/key` | Remove a stored key (an `.env` key, if any, resurfaces) |
+| `GET` | `/router/roles` | Effective role→model assignments |
+| `PUT` | `/router/roles/{id}` | Assign a provider+model to a task role |
+| `DELETE` | `/router/roles/{id}` | Reset a role to its dynamic default |
+| `GET` | `/router/usage` | Estimated spend, by day/provider/activity (`?days=`) |
+| `GET` | `/router/logs` | Recent routing decisions (`?limit=`) |
 
 ### Health
 
@@ -484,7 +508,6 @@ MIT — see [LICENSE](LICENSE).
 ## Acknowledgements
 
 - [Pewdiepie's Odysseus](https://github.com/pewdiepie-archdaemon/odysseus) — architectural inspiration
-- [Ollama](https://ollama.com) — local LLM serving
 - [GAAMA](https://arxiv.org/abs/2406.14429) — graph-augmented associative memory research
 - [Graphiti](https://github.com/getzep/graphiti) — temporal knowledge graph reference
 - [FSRS](https://github.com/open-spaced-repetition/fsrs4anki) — spaced repetition algorithm (planned for memory decay)

@@ -5,7 +5,7 @@ PID_DIR="$ARIA_DIR/.pids"
 
 echo "⏹  Stopping ARIA services..."
 
-for svc in searxng ollama backend frontend; do
+for svc in searxng backend frontend; do
   PID_FILE="$PID_DIR/$svc.pid"
   if [ -f "$PID_FILE" ]; then
     PID=$(cat "$PID_FILE")

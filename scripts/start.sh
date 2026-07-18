@@ -8,7 +8,6 @@ cleanup() {
   echo ""
   echo "⏹  Stopping ARIA services..."
   [ -f "$PID_DIR/searxng.pid" ]  && kill "$(cat $PID_DIR/searxng.pid)"  2>/dev/null; rm -f "$PID_DIR/searxng.pid"
-  [ -f "$PID_DIR/ollama.pid" ]   && kill "$(cat $PID_DIR/ollama.pid)"   2>/dev/null; rm -f "$PID_DIR/ollama.pid"
   [ -f "$PID_DIR/backend.pid" ]  && kill "$(cat $PID_DIR/backend.pid)"  2>/dev/null; rm -f "$PID_DIR/backend.pid"
   [ -f "$PID_DIR/frontend.pid" ] && kill "$(cat $PID_DIR/frontend.pid)" 2>/dev/null; rm -f "$PID_DIR/frontend.pid"
   brew services stop neo4j 2>/dev/null || true
@@ -52,13 +51,6 @@ else
     echo "⚠️  SearXNG may still be starting — check logs/searxng.log if web search fails"
   fi
 fi
-
-# ─── Ollama ───────────────────────────────────────────────────────────────────
-echo "▶  Starting Ollama..."
-ollama serve > "$ARIA_DIR/logs/ollama.log" 2>&1 &
-echo $! > "$PID_DIR/ollama.pid"
-sleep 2
-echo "✅  Ollama started  →  http://localhost:11434"
 
 # ─── Backend ──────────────────────────────────────────────────────────────────
 echo "▶  Starting FastAPI backend..."
