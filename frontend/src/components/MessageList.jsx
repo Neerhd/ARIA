@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Paperclip, MessageSquareText, Pin, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal, ChevronRight } from "lucide-react";
 import Bubble from "./bubble/Bubble";
 import Markdown from "./bubble/Markdown";
-import RetryTierMenu from "./bubble/RetryTierMenu";
-import RoutingPrompt from "./RoutingPrompt";
+import RetryModelMenu from "./bubble/RetryModelMenu";
 import Badge from "./badge/Badge";
 import { useScrollThumb } from "../hooks/useScrollThumb";
 import { cn } from "@/lib/utils";
@@ -50,7 +49,7 @@ function SourcesDisclosure({ sources, onJumpToMemory }) {
   );
 }
 
-export default function MessageList({ messages, loading, onRoutingDecision, onJumpToMemory, onRetryMessage, onEditMessage }) {
+export default function MessageList({ messages, loading, onJumpToMemory, onRetryMessage, onEditMessage, modelOptions = [] }) {
   const bottomRef = useRef(null);
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -83,22 +82,11 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
       >
         <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-5 sm:px-6">
           {messages.map((m) => {
-            if (m.role === "routing") {
-              return (
-                <RoutingPrompt
-                  key={m.id}
-                  data={m}
-                  onConfirm={() => onRoutingDecision(m.id, true)}
-                  onDecline={() => onRoutingDecision(m.id, false)}
-                />
-              );
-            }
-
             const isUser = m.role === "user";
-            // Tool-used and tier badges are intentionally not surfaced here —
+            // Tool-used and model badges are intentionally not surfaced here —
             // that's metadata, not something needed on every reply. Retrying
-            // at a specific tier (RetryTierMenu) covers the one thing tier
-            // actually matters for day to day.
+            // with a specific model (RetryModelMenu) covers the one thing
+            // model choice actually matters for day to day.
             const actions = isUser
               ? [
                   { icon: RotateCcw, label: "Retry", onClick: () => onRetryMessage(m) },
@@ -108,7 +96,7 @@ export default function MessageList({ messages, loading, onRoutingDecision, onJu
               : [
                   { icon: Copy, label: "Copy", onClick: () => copyToClipboard(m.content) },
                   { icon: Share, label: "Share", onClick: () => {} },
-                  { label: "Retry", render: <RetryTierMenu onRetry={(tier) => onRetryMessage(m, tier)} /> },
+                  { label: "Retry", render: <RetryModelMenu options={modelOptions} onRetry={(sel) => onRetryMessage(m, sel)} /> },
                   { icon: Download, label: "Download", onClick: () => {} },
                   { icon: MoreHorizontal, label: "More", onClick: () => {} },
                 ];

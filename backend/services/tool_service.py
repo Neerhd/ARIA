@@ -11,17 +11,7 @@ logger = logging.getLogger(__name__)
 _MAX_FILE_CHARS = 50_000
 _MAX_TOOL_ROUNDS = 5
 
-# Patterns that indicate the model refused to use a tool (training override)
-_REFUSAL_RE = re.compile(
-    r"(don'?t have (?:direct )?access|cannot (?:directly )?(?:write|read|access|create|save)|"
-    r"unable to (?:write|read|access|create|save)|"
-    r"can'?t (?:write|read|access|create|save|directly)|"
-    r"do not have (?:the ability|access|permission|capability) to|"
-    r"no (?:direct )?access to (?:your|the) (?:local|file))",
-    re.IGNORECASE,
-)
-
-# ─── Tool schema definitions (OpenAI / Ollama format) ─────────────────────────
+# ─── Tool schema definitions (OpenAI format — converted per provider) ─────────
 
 _TOOL_DEFS = {
     "file_reader": {
@@ -119,7 +109,7 @@ ALL_TOOLS = list(_TOOL_DEFS.keys())
 
 
 def build_tool_definitions(tools_enabled: list[str]) -> list[dict]:
-    """Return Ollama/OpenAI tool definition objects for the enabled tool names."""
+    """Return OpenAI-style tool definition objects for the enabled tool names."""
     return [_TOOL_DEFS[t] for t in tools_enabled if t in _TOOL_DEFS]
 
 
@@ -383,7 +373,7 @@ def _parse_args(raw) -> dict:
         return {}
 
 
-def _build_assistant_tool_msg(reply: str, tool_calls: list[dict], is_anthropic: bool, is_cloud: bool) -> dict:
+def _build_assistant_tool_msg(reply: str, tool_calls: list[dict], is_anthropic: bool) -> dict:
     if is_anthropic:
         blocks = []
         if reply:
@@ -398,24 +388,22 @@ def _build_assistant_tool_msg(reply: str, tool_calls: list[dict], is_anthropic: 
                 "input": args if isinstance(args, dict) else json.loads(args),
             })
         return {"role": "assistant", "content": blocks}
-    if is_cloud:
-        oc_calls = []
-        for i, tc in enumerate(tool_calls):
-            fn = tc.get("function", {})
-            args = fn.get("arguments", {})
-            oc_calls.append({
-                "id": tc.get("id") or f"call_{i}",
-                "type": "function",
-                "function": {
-                    "name": fn.get("name", ""),
-                    "arguments": args if isinstance(args, str) else json.dumps(args),
-                },
-            })
-        return {"role": "assistant", "content": reply or None, "tool_calls": oc_calls}
-    return {"role": "assistant", "content": reply or "", "tool_calls": tool_calls}
+    oc_calls = []
+    for i, tc in enumerate(tool_calls):
+        fn = tc.get("function", {})
+        args = fn.get("arguments", {})
+        oc_calls.append({
+            "id": tc.get("id") or f"call_{i}",
+            "type": "function",
+            "function": {
+                "name": fn.get("name", ""),
+                "arguments": args if isinstance(args, str) else json.dumps(args),
+            },
+        })
+    return {"role": "assistant", "content": reply or None, "tool_calls": oc_calls}
 
 
-def _build_tool_results_msg(calls_and_results: list[tuple], is_anthropic: bool, is_cloud: bool) -> list[dict]:
+def _build_tool_results_msg(calls_and_results: list[tuple], is_anthropic: bool) -> list[dict]:
     """Return a list of messages for tool results (Anthropic batches them into one user message)."""
     if is_anthropic:
         return [{
@@ -433,63 +421,50 @@ def _build_tool_results_msg(calls_and_results: list[tuple], is_anthropic: bool, 
     for call, result in calls_and_results:
         fn = call.get("function", {})
         name = fn.get("name", "")
-        if is_cloud:
-            msgs.append({
-                "role": "tool",
-                "tool_call_id": call.get("id") or f"call_{name}",
-                "content": result,
-            })
-        else:
-            msgs.append({"role": "tool", "content": result, "name": name})
+        msgs.append({
+            "role": "tool",
+            "tool_call_id": call.get("id") or f"call_{name}",
+            "content": result,
+        })
     return msgs
 
 
 async def run_agentic_loop(
-    tier: int,
+    provider: str,
+    model: str,
     messages: list[dict],
     tools_enabled: list[str],
     project_id: str | None = None,
-    max_tier: int | None = None,
+    role: str | None = None,
 ) -> tuple[str, list[str]]:
     """
     Run the model with tool-call support. Loops until the model returns a plain
     text reply with no pending tool calls. Returns (reply, tool_names_used).
 
-    max_tier caps the reactive tool-refusal escalation below — manual mode's
-    "fast" preference passes 2 here so its "never spend on cloud" guarantee
-    holds even when the local model refuses to use a tool it was given.
+    Providers that can't do function calling (supports_tools=False) get a
+    plain dispatch with no tools attached. role is only carried through to
+    usage tracking.
     """
-    from services.router_service import dispatch, dispatch_with_tools, _is_anthropic
-    from config import settings
+    from services import router_service
 
-    if not tools_enabled:
-        return await dispatch(tier, messages), []
+    role = role or ""
+    if not tools_enabled or not router_service.supports_tools(provider):
+        return await router_service.send(provider, model, messages, purpose="chat", role=role), []
 
     tool_defs = build_tool_definitions(tools_enabled)
     tool_names_used: list[str] = []
     current_messages = list(messages)
-    is_cloud = tier == 3 and bool(settings.tier3_api_key)
-    is_anth = is_cloud and _is_anthropic()
+    is_anth = router_service.is_anthropic(provider)
 
-    for round_num in range(_MAX_TOOL_ROUNDS):
-        reply, tool_calls = await dispatch_with_tools(tier, current_messages, tool_defs)
+    for _round in range(_MAX_TOOL_ROUNDS):
+        reply, tool_calls = await router_service.send_with_tools(
+            provider, model, current_messages, tool_defs, purpose="chat", role=role
+        )
 
         if not tool_calls:
-            if (
-                round_num == 0 and reply and _REFUSAL_RE.search(reply)
-                and settings.tier3_api_key and (max_tier is None or max_tier >= 3)
-            ):
-                logger.warning("Model refused tool (training override). Escalating to T3.")
-                tier = 3
-                is_cloud = True
-                is_anth = _is_anthropic()
-                reply, tool_calls = await dispatch_with_tools(tier, current_messages, tool_defs)
-                if not tool_calls:
-                    return reply, tool_names_used
-            else:
-                return reply, tool_names_used
+            return reply, tool_names_used
 
-        current_messages.append(_build_assistant_tool_msg(reply, tool_calls, is_anth, is_cloud))
+        current_messages.append(_build_assistant_tool_msg(reply, tool_calls, is_anth))
 
         calls_and_results: list[tuple] = []
         for call in tool_calls:
@@ -502,7 +477,9 @@ async def run_agentic_loop(
             logger.info(f"Tool result [{name}]: {result[:120]}")
             calls_and_results.append((call, result))
 
-        current_messages.extend(_build_tool_results_msg(calls_and_results, is_anth, is_cloud))
+        current_messages.extend(_build_tool_results_msg(calls_and_results, is_anth))
 
-    reply, _ = await dispatch_with_tools(tier, current_messages, [])
+    reply, _ = await router_service.send_with_tools(
+        provider, model, current_messages, [], purpose="chat", role=role
+    )
     return reply, tool_names_used

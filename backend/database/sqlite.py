@@ -31,6 +31,10 @@ async def init_db():
         columns = {row[1] for row in result.fetchall()}
         if "pinned" not in columns:
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0"))
+        result = await conn.execute(text("PRAGMA table_info(routing_logs)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "role" not in columns:
+            await conn.execute(text("ALTER TABLE routing_logs ADD COLUMN role VARCHAR(40) NOT NULL DEFAULT ''"))
 
 
 async def get_db():

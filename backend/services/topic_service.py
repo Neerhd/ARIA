@@ -1,9 +1,9 @@
-"""Extract topic tags from conversation turns using the local Ollama model."""
-import httpx
+"""Extract topic tags from conversation turns using the default provider's
+budget model — a small background job, so it always uses the cheap model."""
 import json
 import re
 import logging
-from config import settings
+from services.router_service import default_provider, cheap_model, send
 
 logger = logging.getLogger(__name__)
 
@@ -20,23 +20,20 @@ Tags:"""
 
 async def extract_topics(prompt: str, response: str) -> list[str]:
     """Return 2-3 lowercase topic strings. Falls back to [] on any failure."""
+    provider = default_provider()
+    if provider is None:
+        return []
     short_prompt = prompt[:200].replace("\n", " ")
     short_response = response[:200].replace("\n", " ")
-    payload = {
-        "model": settings.ollama_model,
-        "prompt": _PROMPT.format(prompt=short_prompt, response=short_response),
-        "stream": False,
-        "options": {"temperature": 0, "num_predict": 60},
-    }
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                f"{settings.ollama_base_url}/api/generate",
-                json=payload,
-            )
-            r.raise_for_status()
-            raw = r.json().get("response", "").strip()
-            return _parse_topics(raw)
+        raw = await send(
+            provider,
+            cheap_model(provider),
+            [{"role": "user", "content": _PROMPT.format(prompt=short_prompt, response=short_response)}],
+            max_tokens=100,
+            purpose="memory",
+        )
+        return _parse_topics(raw.strip())
     except Exception as e:
         logger.warning(f"Topic extraction failed: {e}")
         return []

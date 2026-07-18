@@ -5,9 +5,6 @@ BASE_DIR = Path(__file__).parent.parent
 
 
 class Settings(BaseSettings):
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:3b"
-
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
     secret_key: str = "aria-dev-secret"
@@ -19,11 +16,13 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "aria-neo4j-password"
 
-    tier1_model: str = "llama3.2:3b"
-    tier2_model: str = "qwen2.5:14b"
-    tier3_model: str = "claude-sonnet-4-6"
-    tier3_api_key: str = ""
-    tier3_base_url: str = "https://api.anthropic.com/v1"
+    # AI provider API keys — leave blank to disable a provider. The first
+    # configured provider (in router_service priority order) is the default.
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    google_api_key: str = ""
+    xai_api_key: str = ""
+    perplexity_api_key: str = ""
 
     searxng_base_url: str = "http://localhost:8080"
 

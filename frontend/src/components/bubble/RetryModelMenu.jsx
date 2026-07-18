@@ -4,16 +4,14 @@ import { RotateCcw } from "lucide-react";
 import Button from "../button/Button";
 import Tooltip from "../tooltip/Tooltip";
 
-const TIERS = [1, 2, 3];
-
 /**
- * Retry action for assistant replies — click reveals a tiny floating T1/T2/T3
- * choice instead of silently re-classifying, so a specific tier can be
- * forced for one retry (same one-shot override_tier mechanism the ask-mode
- * confirm/decline flow already uses). Portals + positions like Tooltip,
- * since it's the same "float outside any clipping ancestor" need.
+ * Retry action for assistant replies — click reveals a tiny floating menu of
+ * models instead of silently re-routing, so a specific model can be forced
+ * for one retry ("Auto" re-routes normally). One-shot only — the next
+ * message routes fresh as usual. Portals + positions like Tooltip, since
+ * it's the same "float outside any clipping ancestor" need.
  */
-export default function RetryTierMenu({ onRetry }) {
+export default function RetryModelMenu({ options = [], onRetry }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState(null);
   const triggerRef = useRef(null);
@@ -41,6 +39,8 @@ export default function RetryTierMenu({ onRetry }) {
     };
   }, [open]);
 
+  const entries = [{ provider: null, model: null, label: "Auto" }, ...options];
+
   return (
     <>
       <Tooltip label="Retry" side="bottom">
@@ -52,19 +52,19 @@ export default function RetryTierMenu({ onRetry }) {
           <div
             ref={menuRef}
             style={{ position: "fixed", top: coords.top, left: coords.left }}
-            className="font-sidebar z-50 flex gap-0.5 rounded-button border border-tooltip-border bg-tooltip p-1 shadow-sm"
+            className="font-sidebar z-50 flex flex-col gap-0.5 rounded-button border border-tooltip-border bg-tooltip p-1 shadow-sm"
           >
-            {TIERS.map((t) => (
+            {entries.map((opt) => (
               <button
-                key={t}
+                key={opt.model ? `${opt.provider}:${opt.model}` : "auto"}
                 type="button"
                 onClick={() => {
-                  onRetry(t);
+                  onRetry(opt.model ? { provider: opt.provider, model: opt.model } : null);
                   setOpen(false);
                 }}
-                className="cursor-pointer rounded-button px-2 py-1 text-xs font-bold text-tooltip-foreground outline-none hover:bg-white/10"
+                className="cursor-pointer rounded-button px-2 py-1 text-left text-xs font-bold text-tooltip-foreground outline-none hover:bg-white/10"
               >
-                T{t}
+                {opt.label}
               </button>
             ))}
           </div>,

@@ -6,15 +6,17 @@ export async function sendMessage(
   fileContent = null,
   fileName = null,
   routingMode = null,
-  overrideTier = null,
-  tierCap = null,
+  overrideProvider = null,
+  overrideModel = null,
   projectId = null,
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
   if (routingMode) body.routing_mode = routingMode;
-  if (overrideTier != null) body.override_tier = overrideTier;
-  if (tierCap != null) body.tier_cap = tierCap;
+  if (overrideProvider && overrideModel) {
+    body.override_provider = overrideProvider;
+    body.override_model = overrideModel;
+  }
   if (projectId) body.project_id = projectId;
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",
@@ -131,6 +133,62 @@ export async function fetchConsolidationRuns(limit = 5) {
 export async function fetchRouterConfig() {
   const res = await fetch(`${BASE}/router/config`);
   if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchUsage(days = 7) {
+  const res = await fetch(`${BASE}/router/usage?days=${days}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchRoles() {
+  const res = await fetch(`${BASE}/router/roles`);
+  if (!res.ok) return null;
+  return res.json(); // { roles: { role_id: { label, description, provider, model, overridden } } }
+}
+
+export async function assignRole(roleId, provider, model) {
+  const res = await fetch(`${BASE}/router/roles/${roleId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, model }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function resetRole(roleId) {
+  const res = await fetch(`${BASE}/router/roles/${roleId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function setProviderKey(providerId, key) {
+  const res = await fetch(`${BASE}/router/providers/${providerId}/key`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function removeProviderKey(providerId) {
+  const res = await fetch(`${BASE}/router/providers/${providerId}/key`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
   return res.json();
 }
 

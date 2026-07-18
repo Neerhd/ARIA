@@ -1,10 +1,9 @@
 """Consolidation pipeline — clusters Episodes by Concept, synthesises Reflection nodes."""
-import httpx
 import uuid
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
-from config import settings
+from services.router_service import default_provider, cheap_model, send
 from database.sqlite import AsyncSessionLocal
 from models.schemas import Project
 from services.graph_service import get_clusters_for_consolidation, store_reflection
@@ -25,32 +24,34 @@ Reflection:"""
 
 
 async def synthesise_reflection(concept: str, episodes: list[dict]) -> str | None:
-    """Call Ollama to generate a reflection from a cluster of related episodes."""
+    """Generate a reflection from a cluster of related episodes using the
+    default provider's budget model."""
+    provider = default_provider()
+    if provider is None:
+        logger.warning("Reflection synthesis skipped: no AI provider configured.")
+        return None
+
     episode_text = ""
     for i, ep in enumerate(episodes, 1):
         prompt_snippet = (ep.get("prompt") or "")[:200].replace("\n", " ")
         response_snippet = (ep.get("response") or "")[:200].replace("\n", " ")
         episode_text += f"{i}. User: {prompt_snippet}\n   ARIA: {response_snippet}\n\n"
 
-    payload = {
-        "model": settings.ollama_model,
-        "prompt": _REFLECT_PROMPT.format(
-            count=len(episodes),
-            concept=concept,
-            episodes=episode_text.strip(),
-        ),
-        "stream": False,
-        "options": {"temperature": 0.3, "num_predict": 150},
-    }
+    prompt = _REFLECT_PROMPT.format(
+        count=len(episodes),
+        concept=concept,
+        episodes=episode_text.strip(),
+    )
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(
-                f"{settings.ollama_base_url}/api/generate",
-                json=payload,
-            )
-            r.raise_for_status()
-            text = r.json().get("response", "").strip()
-            return text if len(text) >= 30 else None
+        text = await send(
+            provider,
+            cheap_model(provider),
+            [{"role": "user", "content": prompt}],
+            max_tokens=300,
+            purpose="memory",
+        )
+        text = text.strip()
+        return text if len(text) >= 30 else None
     except Exception as e:
         logger.warning(f"Reflection synthesis failed for concept '{concept}': {e}")
         return None

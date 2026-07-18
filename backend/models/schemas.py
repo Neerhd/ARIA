@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, Integer, Boolean, ForeignKey
+from sqlalchemy import String, Text, DateTime, Integer, Boolean, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from database.sqlite import Base
 import uuid
@@ -49,9 +49,11 @@ class ChatRequest(BaseModel):
     stream: bool = False
     file_content: Optional[str] = None
     file_name: Optional[str] = None
-    routing_mode: Optional[str] = None   # "auto" | "manual" | "ask"
-    override_tier: Optional[int] = None  # one-shot: force this exact tier, skip classification (ask-mode confirm/decline resend)
-    tier_cap: Optional[int] = None       # manual mode only: clamp classify_action's result to at most this tier (2="fast", None="quality")
+    routing_mode: Optional[str] = None       # "auto" | "manual" ("ask" accepted but treated as auto)
+    override_provider: Optional[str] = None  # manual pick: provider id (with override_model, bypasses classification)
+    override_model: Optional[str] = None     # manual pick: exact model id on that provider
+    override_tier: Optional[int] = None      # legacy tier field — accepted and ignored until the Phase 3 frontend update
+    tier_cap: Optional[int] = None           # legacy tier field — accepted and ignored until the Phase 3 frontend update
 
     def effective_message(self) -> str:
         if self.message.strip():
@@ -66,6 +68,8 @@ class ChatResponse(BaseModel):
     conversation_id: str
     message_id: str
     model: str
+    provider: Optional[str] = None
+    role: Optional[str] = None   # classified task role (None in manual mode / on classifier failure)
     tier: int = 1
     signals: list[str] = []
     tools_used: list[str] = []
@@ -129,10 +133,25 @@ class RoutingLog(Base):
     message_id: Mapped[str] = mapped_column(String(36), nullable=False)
     conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
     routing_mode: Mapped[str] = mapped_column(String(20), default="auto")
-    classified_tier: Mapped[int] = mapped_column(Integer, default=1)
-    actual_tier: Mapped[int] = mapped_column(Integer, default=1)
+    role: Mapped[str] = mapped_column(String(40), default="")  # classified task role ("" = manual/unclassified)
+    classified_tier: Mapped[int] = mapped_column(Integer, default=1)  # legacy — unused since the tier system was removed
+    actual_tier: Mapped[int] = mapped_column(Integer, default=1)      # legacy — unused since the tier system was removed
     model_used: Mapped[str] = mapped_column(String(100), default="")
     signals: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class UsageLog(Base):
+    __tablename__ = "usage_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(30), default="other")  # chat | classifier | memory | graph_query | key_check | other
+    role: Mapped[str] = mapped_column(String(40), default="")          # task role, chat calls only
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)        # estimated, not billing truth
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -151,8 +170,8 @@ class ConsolidationRun(Base):
 
 class HealthResponse(BaseModel):
     status: str
-    ollama: bool
+    providers: dict[str, bool]  # provider id -> API key configured
     sqlite: bool
     chroma: bool
     neo4j: bool
-    model: str
+    model: str  # default provider's chat model, "" when none configured

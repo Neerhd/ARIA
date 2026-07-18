@@ -5,12 +5,13 @@ import InputBar from "./components/input-bar/InputBar";
 import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
+import FirstRunSetup from "./components/FirstRunSetup";
 import Button from "./components/button/Button";
 import Tooltip from "./components/tooltip/Tooltip";
 import Avatar from "./components/avatar/Avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
-import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned } from "./services/api";
+import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned, fetchRouterConfig } from "./services/api";
 import { createGreetingCycle } from "./lib/greetings";
 
 const GraphView = lazy(() => import("./components/GraphView"));
@@ -113,30 +114,50 @@ export default function App() {
     handleNewChat();
   };
 
-  // Routing state — persisted to localStorage. conversationTier is
-  // display-only (the badge showing what tier the last reply actually used)
-  // — it is never sent back as an input to the next message's routing.
-  const [routingMode, setRoutingMode] = useState(
-    () => localStorage.getItem("aria-routing-mode") || "auto"
-  );
-  const [conversationTier, setConversationTier] = useState(1);
-  const [pendingRouting, setPendingRouting] = useState(null);
+  // Routing state — persisted to localStorage. "ask" was retired with the
+  // tier system; anything stored as "ask" falls back to auto.
+  const [routingMode, setRoutingMode] = useState(() => {
+    const stored = localStorage.getItem("aria-routing-mode");
+    return stored === "manual" ? "manual" : "auto";
+  });
 
-  // Manual mode's coarse preference — "fast" caps every message at T2 (stays
-  // local/free, never escalates to paid T3 even reactively); "quality"
-  // applies no ceiling. A standing preference like routingMode itself, not
-  // a per-message override.
-  const [manualPreference, setManualPreference] = useState(
-    () => localStorage.getItem("aria-manual-preference") || "fast"
-  );
+  // Provider/model catalog — drives the manual picker, the retry menu, and
+  // the first-run setup. Refreshed whenever a key is added in Settings.
+  const [routerConfig, setRouterConfig] = useState(null);
+  const refreshRouterConfig = () => {
+    fetchRouterConfig().then(setRouterConfig).catch(() => {});
+  };
+  useEffect(() => {
+    refreshRouterConfig();
+  }, []);
+
+  // Every selectable model across configured providers.
+  const modelOptions = routerConfig
+    ? Object.entries(routerConfig.providers)
+        .filter(([, p]) => p.configured)
+        .flatMap(([pid, p]) =>
+          p.models.map((m) => ({ provider: pid, model: m.id, label: m.label }))
+        )
+    : [];
+
+  // Manual mode's standing pick — {provider, model} or null (null = let the
+  // backend use its default model). Persisted like routingMode.
+  const [manualModel, setManualModel] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("aria-manual-model")) || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     localStorage.setItem("aria-routing-mode", routingMode);
   }, [routingMode]);
 
   useEffect(() => {
-    localStorage.setItem("aria-manual-preference", manualPreference);
-  }, [manualPreference]);
+    if (manualModel) localStorage.setItem("aria-manual-model", JSON.stringify(manualModel));
+    else localStorage.removeItem("aria-manual-model");
+  }, [manualModel]);
 
   const handleModeChange = (mode) => setRoutingMode(mode);
 
@@ -144,8 +165,6 @@ export default function App() {
     setView("chat");
     setConversationId(id);
     setError(null);
-    setConversationTier(1);
-    setPendingRouting(null);
     try {
       const msgs = await fetchMessages(id);
       setMessages(msgs);
@@ -158,13 +177,13 @@ export default function App() {
     setConversationId(null);
     setMessages([]);
     setError(null);
-    setConversationTier(1);
-    setPendingRouting(null);
     setGreeting(nextGreeting());
   };
 
-  // Core send — called both on first send and after routing confirmation
-  const _doSend = async (text, fileContent, fileName, truncated, overrideTier, existingConvoId) => {
+  // Core send. overrideSel ({provider, model} | null) is a one-shot explicit
+  // pick — used by the retry menu; a normal manual-mode send uses the
+  // standing manualModel pick instead.
+  const _doSend = async (text, fileContent, fileName, truncated, overrideSel, existingConvoId) => {
     const targetConvoId = existingConvoId ?? conversationId;
     const displayText = text.trim() || (fileName ? "Please read and summarise this file for me." : "");
     const optimisticId = `tmp-${Date.now()}`;
@@ -183,41 +202,16 @@ export default function App() {
     setError(null);
 
     try {
-      // overrideTier is only ever set for the one-shot ask-mode confirm/decline
-      // resend (see handleRoutingDecision) — it forces that single message's
-      // tier and is never carried into subsequent messages. Manual mode never
-      // sends a raw tier; it sends a cap that classify_action's fresh
-      // per-message result gets clamped against, so signals still matter.
-      const reqMode = overrideTier != null ? "manual" : routingMode;
-      const reqTier = overrideTier != null ? overrideTier : undefined;
-      const reqTierCap = overrideTier == null && routingMode === "manual" && manualPreference === "fast" ? 2 : undefined;
+      // A one-shot pick (retry menu) forces manual for that single message;
+      // otherwise manual mode sends the standing pick (when one is set) and
+      // auto sends nothing — the backend classifies and routes.
+      const sel = overrideSel ?? (routingMode === "manual" ? manualModel : null);
+      const reqMode = overrideSel ? "manual" : routingMode;
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, reqTier, reqTierCap, activeProjectId);
+      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, sel?.provider, sel?.model, activeProjectId);
 
       if (!conversationId) setConversationId(data.conversation_id);
 
-      if (data.permission_required) {
-        setMessages((prev) => [
-          ...prev.filter((m) => m.id !== optimisticId),
-          { ...optimistic, id: `user-${data.message_id}` },
-          { id: `routing-${data.message_id}`, role: "routing", ...data },
-        ]);
-        setPendingRouting({
-          text,
-          fileContent,
-          fileName,
-          truncated: truncated || false,
-          conversationId: data.conversation_id,
-          suggestedTier: data.suggested_tier,
-          suggestedModel: data.suggested_model,
-          signals: data.signals,
-          routingMsgId: data.message_id,
-        });
-        return;
-      }
-
-      // Normal success
-      if (data.tier) setConversationTier(data.tier);
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimisticId),
         { ...optimistic, id: `user-${data.message_id}` },
@@ -225,9 +219,9 @@ export default function App() {
           id: data.message_id,
           role: "assistant",
           content: data.reply,
-          tier: data.tier,
           model: data.model,
-          signals: data.signals,
+          provider: data.provider,
+          task_role: data.role,
           tools_used: data.tools_used || [],
           sources: data.sources || [],
           conversation_id: data.conversation_id,
@@ -257,26 +251,12 @@ export default function App() {
     await _doSend(text, fileContent, fileName, truncated, null, null);
   };
 
-  const handleRoutingDecision = async (routingMsgId, confirmed) => {
-    if (!pendingRouting) return;
-    const { text, fileContent, fileName, truncated, conversationId: pendingConvoId, suggestedTier } = pendingRouting;
-
-    setMessages((prev) => prev.filter((m) => m.id !== `routing-${routingMsgId}`));
-    setPendingRouting(null);
-
-    const overrideTier = confirmed ? suggestedTier : 1;
-    if (confirmed) setConversationTier(suggestedTier);
-
-    await _doSend(text, fileContent, fileName, truncated, overrideTier, pendingConvoId);
-  };
-
   // Retry re-sends the user text behind a message — for a user bubble that's
   // its own content, for an assistant reply it's the nearest preceding user
-  // message (attachments aren't retried, only the text). An explicit tier
-  // (from RetryTierMenu, assistant replies only) forces that one resend via
-  // the same one-shot override_tier the ask-mode confirm/decline flow uses —
-  // it's not sticky, the next message classifies fresh as normal.
-  const handleRetryMessage = (message, tier) => {
+  // message (attachments aren't retried, only the text). An explicit model
+  // pick (from RetryModelMenu, assistant replies only) forces that one
+  // resend — it's not sticky, the next message routes fresh as normal.
+  const handleRetryMessage = (message, sel) => {
     if (loading) return;
     const userText =
       message.role === "user"
@@ -286,7 +266,7 @@ export default function App() {
             .reverse()
             .find((m) => m.role === "user")?.content;
     if (!userText) return;
-    _doSend(userText, null, null, false, tier ?? null, conversationId);
+    _doSend(userText, null, null, false, sel ?? null, conversationId);
   };
 
   // Drops a sent message's text back into the composer for editing — see
@@ -464,9 +444,9 @@ export default function App() {
                     onSend={handleSend}
                     disabled={loading}
                     routingMode={routingMode}
-                    conversationTier={conversationTier}
-                    manualPreference={manualPreference}
-                    onPreferenceChange={setManualPreference}
+                    manualModel={manualModel}
+                    onManualModelChange={setManualModel}
+                    modelOptions={modelOptions}
                   />
                 </div>
               </div>
@@ -476,10 +456,10 @@ export default function App() {
               <MessageList
                 messages={messages}
                 loading={loading}
-                onRoutingDecision={handleRoutingDecision}
                 onJumpToMemory={handleJumpToMemory}
                 onRetryMessage={handleRetryMessage}
                 onEditMessage={handleEditMessage}
+                modelOptions={modelOptions}
               />
               {error && (
                 <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
@@ -494,9 +474,9 @@ export default function App() {
                     onSend={handleSend}
                     disabled={loading}
                     routingMode={routingMode}
-                    conversationTier={conversationTier}
-                    manualPreference={manualPreference}
-                    onPreferenceChange={setManualPreference}
+                    manualModel={manualModel}
+                    onManualModelChange={setManualModel}
+                    modelOptions={modelOptions}
                     isFollowUp={messages.length > 0}
                     prefillText={editDraft?.text}
                     prefillKey={editDraft?.key}
@@ -519,7 +499,11 @@ export default function App() {
         onOpenChange={setSettingsOpen}
         routingMode={routingMode}
         onModeChange={handleModeChange}
+        onConfigChanged={refreshRouterConfig}
       />
+      {routerConfig && !routerConfig.default_provider && (
+        <FirstRunSetup providers={routerConfig.providers} onConnected={refreshRouterConfig} />
+      )}
       <ProjectSwitcher
         open={projectSwitcherOpen}
         onOpenChange={setProjectSwitcherOpen}

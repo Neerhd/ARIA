@@ -12,6 +12,7 @@ from api.consolidation import router as consolidation_router, run_consolidation_
 from api.router import router as router_router
 from api.projects import router as projects_router
 from api.graph import router as graph_router
+from services.usage_service import usage_writer
 import asyncio
 import logging
 
@@ -47,9 +48,11 @@ async def lifespan(app: FastAPI):
     logger.info("SQLite database initialized.")
     await init_graph_schema()
     scheduler = asyncio.create_task(_nightly_consolidation())
+    usage_task = asyncio.create_task(usage_writer())
     yield
     logger.info("ARIA backend shutting down...")
     scheduler.cancel()
+    usage_task.cancel()
     await close_neo4j_driver()
 
 

@@ -110,14 +110,18 @@ def _extract_cypher(raw: str) -> str:
 
 
 async def generate_cypher(question: str, retry_after_rejection: bool = False) -> str:
-    from services.router_service import dispatch
+    from services.router_service import default_provider, default_model, send
+
+    provider = default_provider()
+    if provider is None:
+        raise RuntimeError("No AI provider configured — cannot query the memory graph.")
 
     system = _GENERATION_SYSTEM_PROMPT + (_RETRY_SUFFIX if retry_after_rejection else "")
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": question},
     ]
-    raw = await dispatch(3, messages)
+    raw = await send(provider, default_model(provider), messages, purpose="graph_query")
     return _extract_cypher(raw)
 
 

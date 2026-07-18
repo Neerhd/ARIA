@@ -6,7 +6,6 @@ from models.schemas import (
     Conversation, Message, RoutingLog, Project,
 )
 from database.sqlite import get_db
-from services.ollama_service import check_ollama_alive
 from services.memory_service import store_memory, search_memory
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
@@ -14,9 +13,10 @@ from services.graph_service import (
 )
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
-from services.router_service import classify_action, tier_model
+from services.router_service import default_provider, default_model, is_configured, PROVIDERS
+from services.role_service import resolve_role
+from services.role_classifier_service import classify_role
 from services.tool_service import run_agentic_loop, ALL_TOOLS
-from config import settings
 import uuid
 import json
 import re
@@ -93,7 +93,10 @@ async def send_message(
         raise HTTPException(422, "Provide a message or attach a file.")
 
     # ── Determine routing ──────────────────────────────────────────────────────
+    # "ask" mode was retired with the tier system — treat it as auto.
     routing_mode = req.routing_mode or "auto"
+    if routing_mode == "ask":
+        routing_mode = "auto"
 
     # ── Create or load conversation ────────────────────────────────────────────
     # A new conversation's project_id comes from the request, falling back to the
@@ -127,43 +130,37 @@ async def send_message(
     )
     history = list(reversed(history_result.scalars().all()))
 
-    # ── Classify action and determine tier ─────────────────────────────────────
-    # Every message is classified fresh from its own signals — no carry-over
-    # from a prior message's tier, in any routing mode.
-    classified_tier, signals = classify_action(req, len(history))
-
-    if req.override_tier is not None:
-        # One-shot: the ask-mode confirm/decline resend forces an exact tier
-        # for that single message, bypassing classification's result.
-        actual_tier = max(1, min(3, req.override_tier))
-    elif req.tier_cap is not None:
-        # Manual mode's "fast" preference — classify normally, then clamp the
-        # ceiling (e.g. cap=2 means never escalate to paid/cloud T3).
-        actual_tier = min(classified_tier, max(1, req.tier_cap))
-    else:
-        actual_tier = classified_tier
-
-    # ── Ask mode: return a permission prompt instead of calling the model ──────
-    if routing_mode == "ask" and req.override_tier is None and classified_tier > 1:
-        perm_id = str(uuid.uuid4())
-        return ChatResponse(
-            reply="",
-            conversation_id=convo.id,
-            message_id=perm_id,
-            model=tier_model(classified_tier),
-            tier=1,
-            signals=signals,
-            permission_required=True,
-            suggested_tier=classified_tier,
-            suggested_model=tier_model(classified_tier),
+    # ── Resolve provider & model ───────────────────────────────────────────────
+    # A manual pick (override_provider + override_model) bypasses classification
+    # entirely. Otherwise Auto classifies the message into a task role and
+    # routes to whatever model that role is assigned to. Manual mode without a
+    # pick uses the default model — predictable, no classifier call.
+    if default_provider() is None:
+        raise HTTPException(
+            503,
+            "No AI provider configured. Add at least one API key "
+            "(e.g. ANTHROPIC_API_KEY) to backend/.env and restart ARIA.",
         )
 
-    # ── Verify the target model is reachable ───────────────────────────────────
-    if actual_tier < 3:
-        if not await check_ollama_alive():
-            raise HTTPException(503, "Ollama is not running. Start it with: ollama serve")
-    elif not settings.tier3_api_key:
-        raise HTTPException(503, "Tier 3 model not configured — add TIER3_API_KEY to .env")
+    role: str | None = None
+    if req.override_provider and req.override_model:
+        if req.override_provider not in PROVIDERS:
+            raise HTTPException(404, f"Unknown provider: {req.override_provider}")
+        if not is_configured(req.override_provider):
+            raise HTTPException(
+                503,
+                f"{PROVIDERS[req.override_provider].label} is not configured — "
+                "add its API key in Settings first.",
+            )
+        routing_mode = "manual"
+        provider, model = req.override_provider, req.override_model
+    elif routing_mode == "manual":
+        provider = default_provider()
+        model = default_model(provider)
+    else:
+        role = await classify_role(user_text, bool(req.file_content))
+        provider, model = resolve_role(role)
+        logger.info(f"Routing: role={role or 'unclassified'} → {provider}:{model}")
 
     # ── Detect "remember" intent and queue fact storage ────────────────────────
     new_fact_text = _extract_fact(user_text)
@@ -220,8 +217,6 @@ async def send_message(
     # ── Build tool-capability instruction (overrides trained refusals) ────────
     # Tools are always available — the model decides per-message whether one
     # is actually relevant via function-calling, same as any other capability.
-    # No standing toggle: previously a tool being merely enabled forced every
-    # message to tier 3 regardless of relevance (see classify_action).
     tools_enabled = ALL_TOOLS
     import getpass as _gp
     from pathlib import Path as _P
@@ -272,11 +267,9 @@ async def send_message(
     messages.append({"role": "user", "content": user_turn})
 
     # ── Call the model — always via the agentic loop, since tools are always
-    #    available; the model itself decides whether to invoke one. max_tier
-    #    keeps a manual-mode "fast" cap binding even through the loop's own
-    #    reactive tool-refusal escalation. ─────────────────────────────────
+    #    available; the model itself decides whether to invoke one. ──────────
     reply, tools_used = await run_agentic_loop(
-        actual_tier, messages, tools_enabled, convo.project_id, max_tier=req.tier_cap
+        provider, model, messages, tools_enabled, convo.project_id, role=role
     )
 
     # ── Persist to SQLite ──────────────────────────────────────────────────────
@@ -303,10 +296,9 @@ async def send_message(
         message_id=episode_id,
         conversation_id=convo.id,
         routing_mode=routing_mode,
-        classified_tier=classified_tier,
-        actual_tier=actual_tier,
-        model_used=tier_model(actual_tier),
-        signals=json.dumps(signals),
+        role=role or "",
+        model_used=f"{provider}:{model}",
+        signals=json.dumps([]),
     )
     db.add(user_msg)
     db.add(assistant_msg)
@@ -334,9 +326,11 @@ async def send_message(
         reply=reply,
         conversation_id=convo.id,
         message_id=episode_id,
-        model=tier_model(actual_tier),
-        tier=actual_tier,
-        signals=signals,
+        model=model,
+        provider=provider,
+        role=role,
+        tier=1,
+        signals=[],
         tools_used=tools_used,
         sources=sources,
     )

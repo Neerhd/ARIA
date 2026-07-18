@@ -1,21 +1,39 @@
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
-import { fetchRouterConfig } from "../services/api";
+import { fetchRouterConfig, fetchRoles, fetchUsage } from "../services/api";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import RoutingModeSection from "./settings/RoutingModeSection";
-import TierConfigSection from "./settings/TierConfigSection";
+import RoleAssignmentSection from "./settings/RoleAssignmentSection";
+import ProviderConfigSection from "./settings/ProviderConfigSection";
+import UsageSection from "./settings/UsageSection";
 
 export default function RouterSettings({
   open,
   onOpenChange,
   routingMode,
   onModeChange,
+  onConfigChanged,
 }) {
   const [config, setConfig] = useState(null);
+  const [roles, setRoles] = useState(null);
+  const [usage, setUsage] = useState(null);
+
+  const refresh = () => {
+    fetchRouterConfig().then(setConfig).catch(() => {});
+    fetchRoles().then((data) => setRoles(data?.roles ?? null)).catch(() => {});
+    fetchUsage(7).then(setUsage).catch(() => {});
+  };
 
   useEffect(() => {
-    if (open) fetchRouterConfig().then(setConfig).catch(() => {});
+    if (open) refresh();
   }, [open]);
+
+  // Key/role changes affect the whole app (manual picker, first-run gate) —
+  // refresh both this sheet's data and App's copy of the config.
+  const handleChanged = () => {
+    refresh();
+    onConfigChanged?.();
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -28,7 +46,9 @@ export default function RouterSettings({
 
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           <RoutingModeSection routingMode={routingMode} onModeChange={onModeChange} />
-          <TierConfigSection config={config} />
+          <UsageSection usage={usage} />
+          <RoleAssignmentSection config={config} roles={roles} onRolesChanged={handleChanged} />
+          <ProviderConfigSection config={config} onConfigChanged={handleChanged} />
         </div>
       </SheetContent>
     </Sheet>

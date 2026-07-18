@@ -2,9 +2,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
 const MODES = [
-  { key: "auto",   label: "Auto",   desc: "System picks the model based on what you're doing. You see which model responded." },
-  { key: "ask",    label: "Ask",    desc: "System suggests an upgrade when it detects a heavier task, but asks your permission first." },
-  { key: "manual", label: "Manual", desc: "Choose Fast (stays local, never spends on cloud) or Quality (allows escalation when a message needs it)." },
+  { key: "auto",   label: "Auto",   desc: "ARIA picks which AI model answers each message." },
+  { key: "manual", label: "Manual", desc: "You choose the model — a per-message picker arrives with the settings update." },
 ];
 
 export default function RoutingModeSection({ routingMode, onModeChange }) {
