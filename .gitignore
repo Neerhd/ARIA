@@ -27,6 +27,7 @@ backend/data/
 # Runtime
 logs/
 .pids/
+voice/recordings/
 
 # macOS
 .DS_Store

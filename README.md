@@ -278,6 +278,12 @@ ARIA/
 │       │   └── useGraphData.js     # 3D graph data fetching (M12)
 │       └── services/
 │           └── api.js          # All backend API calls
+├── voice/                      # ARIA Voice — system-wide dictation + voice commands
+│   ├── recorder.py             # Hotkey listener (Ctrl+H dictation, Ctrl+J commands) + audio capture
+│   ├── transcriber.py          # Local Whisper (faster-whisper) speech-to-text
+│   ├── injector.py             # Clipboard-paste text injection
+│   ├── command_mode.py         # Context capture (app/selection), ARIA client, clipboard restore
+│   └── requirements.txt        # Voice-only Python dependencies (own .venv)
 └── data/                       # Local databases (never committed)
     ├── sqlite/
     ├── chroma/
@@ -375,6 +381,24 @@ Example prompts:
 - *"Research X and save a report to ~/Desktop/report.pdf"*
 - *"Create a project plan and save it as ~/Documents/plan.docx"*
 - *"Make a comparison table and save to ~/Desktop/data.xlsx"*
+
+## Voice — system-wide dictation and voice commands
+
+ARIA Voice runs alongside the app (started automatically by `start.sh`) and works in **any** macOS app, not just ARIA's chat window:
+
+| Mode | Hotkey | What happens |
+|---|---|---|
+| **Dictation** | Tap `Ctrl+H` to start, tap again to stop | Your words are transcribed locally (Whisper — audio never leaves the machine) and typed into whatever field has focus |
+| **Command** | **Hold** `Ctrl+J`, speak, release | Your request goes to ARIA with context — which app you're in, plus anything you had selected — and ARIA's *answer* is pasted in its place. A soft pop confirms it heard you; an error tone means ARIA was unreachable (nothing is pasted) |
+
+Command-mode examples:
+
+- In **Notes**: *"fill this with today's ARIA decisions, with references"* → a formatted summary drawn from memory appears
+- In **Mail**, with an email selected: *"write a response to this"* → a paste-ready draft (ARIA checks your calendar on its own if availability matters)
+
+Voice commands route to the **Agentic & Tools** role's model, are stored in a rolling **Voice Commands** conversation (Default project), and enter memory like normal chat. Your clipboard is snapshotted and restored around each command (text-only fidelity — a copied image won't survive it). First run needs one-time **microphone** and **accessibility** permissions for the terminal app that runs ARIA. Dictation is 100% local; command-mode transcripts go to your configured AI provider like any chat message.
+
+---
 
 ## Supported file types (attachments)
 

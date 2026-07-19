@@ -8,6 +8,7 @@ cleanup() {
   echo ""
   echo "⏹  Stopping ARIA services..."
   [ -f "$PID_DIR/searxng.pid" ]  && kill "$(cat $PID_DIR/searxng.pid)"  2>/dev/null; rm -f "$PID_DIR/searxng.pid"
+  [ -f "$PID_DIR/voice.pid" ]    && kill "$(cat $PID_DIR/voice.pid)"    2>/dev/null; rm -f "$PID_DIR/voice.pid"
   [ -f "$PID_DIR/backend.pid" ]  && kill "$(cat $PID_DIR/backend.pid)"  2>/dev/null; rm -f "$PID_DIR/backend.pid"
   [ -f "$PID_DIR/frontend.pid" ] && kill "$(cat $PID_DIR/frontend.pid)" 2>/dev/null; rm -f "$PID_DIR/frontend.pid"
   brew services stop neo4j 2>/dev/null || true
@@ -60,6 +61,19 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload > "$ARIA_DIR/logs/backend.l
 echo $! > "$PID_DIR/backend.pid"
 sleep 2
 echo "✅  Backend started  →  http://localhost:8000  (API docs: /docs)"
+
+# ─── ARIA Voice (dictation + voice commands) ─────────────────────────────────
+VOICE_PYTHON="$ARIA_DIR/voice/.venv/bin/python"
+if [ -f "$VOICE_PYTHON" ]; then
+  echo "▶  Starting ARIA Voice..."
+  cd "$ARIA_DIR/voice"
+  "$VOICE_PYTHON" recorder.py > "$ARIA_DIR/logs/voice.log" 2>&1 &
+  echo $! > "$PID_DIR/voice.pid"
+  echo "✅  Voice started  →  Ctrl+H dictation · hold Ctrl+J for commands"
+  echo "    (needs mic + accessibility permissions for Terminal on first run)"
+else
+  echo "⚠️  ARIA Voice not installed — run ./scripts/install.sh to enable it"
+fi
 
 # ─── Frontend ─────────────────────────────────────────────────────────────────
 echo "▶  Starting React frontend..."

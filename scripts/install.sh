@@ -108,6 +108,17 @@ else
   echo "✅  SearXNG settings already present"
 fi
 
+# ─── 8. ARIA Voice (system-wide dictation + voice commands) ──────────────────
+echo ""
+echo "🎙  Setting up ARIA Voice..."
+VOICE_DIR="$ARIA_DIR/voice"
+if [ ! -d "$VOICE_DIR/.venv" ]; then
+  $PYTHON -m venv "$VOICE_DIR/.venv"
+fi
+"$VOICE_DIR/.venv/bin/pip" install --upgrade pip --quiet
+"$VOICE_DIR/.venv/bin/pip" install -r "$VOICE_DIR/requirements.txt" --quiet
+echo "✅  ARIA Voice installed (Whisper model ~145 MB downloads on first use)"
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║   ✅  ARIA installation complete!                         ║"
