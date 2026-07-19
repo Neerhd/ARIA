@@ -11,7 +11,7 @@ cleanup() {
   [ -f "$PID_DIR/voice.pid" ]    && kill "$(cat $PID_DIR/voice.pid)"    2>/dev/null; rm -f "$PID_DIR/voice.pid"
   [ -f "$PID_DIR/backend.pid" ]  && kill "$(cat $PID_DIR/backend.pid)"  2>/dev/null; rm -f "$PID_DIR/backend.pid"
   [ -f "$PID_DIR/frontend.pid" ] && kill "$(cat $PID_DIR/frontend.pid)" 2>/dev/null; rm -f "$PID_DIR/frontend.pid"
-  brew services stop neo4j 2>/dev/null || true
+  "$(brew --prefix)/opt/neo4j/bin/neo4j" stop 2>/dev/null || true
   echo "✅  All services stopped."
   exit 0
 }
@@ -23,9 +23,13 @@ echo "║   🚀  Starting ARIA                      ║"
 echo "╚══════════════════════════════════════════╝"
 
 # ─── Neo4j ────────────────────────────────────────────────────────────────────
+# Launched via Neo4j's own daemonizer, not `brew services` — launchd has a
+# habit of wedging the job ("Running: false" right after a successful start),
+# while the binary's start/stop is reliable and keeps all service management
+# inside these scripts.
 echo "▶  Starting Neo4j..."
-brew services start neo4j
-sleep 3
+"$(brew --prefix)/opt/neo4j/bin/neo4j" start > "$ARIA_DIR/logs/neo4j-start.log" 2>&1 || true
+sleep 5
 echo "✅  Neo4j started  →  http://localhost:7474"
 
 # ─── SearXNG ──────────────────────────────────────────────────────────────────

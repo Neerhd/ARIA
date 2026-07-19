@@ -13,6 +13,12 @@ async def get_neo4j_driver():
         _driver = AsyncGraphDatabase.driver(
             settings.neo4j_uri,
             auth=(settings.neo4j_user, settings.neo4j_password),
+            # Local database: it's either up or it's not. The driver defaults
+            # retry transient failures for 30s+ with backoff, which turns a
+            # stopped Neo4j into a minute-long stall inside chat/voice
+            # requests — fail fast instead and let callers degrade gracefully.
+            connection_timeout=3.0,
+            max_transaction_retry_time=5.0,
         )
     return _driver
 

@@ -16,5 +16,5 @@ for svc in searxng voice backend frontend; do
   fi
 done
 
-brew services stop neo4j 2>/dev/null && echo "  ✅  Neo4j stopped"
+"$(brew --prefix)/opt/neo4j/bin/neo4j" stop 2>/dev/null && echo "  ✅  Neo4j stopped"
 echo "Done."
