@@ -396,7 +396,7 @@ Command-mode examples:
 - In **Notes**: *"fill this with today's ARIA decisions, with references"* → a formatted summary drawn from memory appears
 - In **Mail**, with an email selected: *"write a response to this"* → a paste-ready draft (ARIA checks your calendar on its own if availability matters)
 
-Voice commands route to the **Agentic & Tools** role's model, are stored in a rolling **Voice Commands** conversation (Default project), and enter memory like normal chat. Your clipboard is snapshotted and restored around each command (text-only fidelity — a copied image won't survive it). First run needs one-time **microphone** and **accessibility** permissions for the terminal app that runs ARIA. Dictation is 100% local; command-mode transcripts go to your configured AI provider like any chat message.
+Voice commands have their own **Voice** task role — the budget model by default for snappy replies, reassignable in **Settings → Task Roles** if you prefer depth over speed. They search memory **across all projects**, are stored in a rolling **Voice Commands** conversation (Default project), and enter memory like normal chat. Your clipboard is snapshotted and restored around each command (text-only fidelity — a copied image won't survive it). First run needs one-time **microphone** and **accessibility** permissions for the terminal app that runs ARIA. Dictation is 100% local; command-mode transcripts go to your configured AI provider like any chat message.
 
 ---
 

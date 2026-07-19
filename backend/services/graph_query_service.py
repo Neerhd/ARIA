@@ -69,6 +69,12 @@ Rules:
   fields rather than exact equality, since user questions are informal.
 """
 
+_ALL_PROJECTS_SUFFIX = """
+
+For THIS question, search across ALL projects: do NOT filter Episodes or \
+Reflections by project_id, and never reference the $project_id parameter.
+"""
+
 _RETRY_SUFFIX = """
 
 Your previous attempt contained a write clause (CREATE/MERGE/DELETE/SET/REMOVE), \
@@ -109,19 +115,28 @@ def _extract_cypher(raw: str) -> str:
     return text
 
 
-async def generate_cypher(question: str, retry_after_rejection: bool = False) -> str:
-    from services.router_service import default_provider, default_model, send
+async def generate_cypher(
+    question: str, retry_after_rejection: bool = False, all_projects: bool = False
+) -> str:
+    from services.router_service import default_provider, cheap_model, send
 
     provider = default_provider()
     if provider is None:
         raise RuntimeError("No AI provider configured — cannot query the memory graph.")
 
-    system = _GENERATION_SYSTEM_PROMPT + (_RETRY_SUFFIX if retry_after_rejection else "")
+    system = (
+        _GENERATION_SYSTEM_PROMPT
+        + (_ALL_PROJECTS_SUFFIX if all_projects else "")
+        + (_RETRY_SUFFIX if retry_after_rejection else "")
+    )
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": question},
     ]
-    raw = await send(provider, default_model(provider), messages, purpose="graph_query")
+    # Cypher generation is a mechanical, schema-guided task — the budget
+    # model handles it well, and this call sits inside latency-sensitive
+    # paths (voice commands, mid-chat tool rounds).
+    raw = await send(provider, cheap_model(provider), messages, purpose="graph_query")
     return _extract_cypher(raw)
 
 
@@ -156,17 +171,20 @@ def _format_rows(rows: list[dict]) -> str:
     return text
 
 
-async def query_graph(question: str, project_id: str) -> str:
+async def query_graph(question: str, project_id: str | None) -> str:
     """Top-level orchestrator: generate -> validate (reject+retry once) ->
     execute -> return results, formatted for the calling model to turn into
     a natural-language answer (never shown to the user as raw graph data —
     only the model's final synthesised reply is).
+
+    project_id=None searches across ALL projects (voice commands).
     """
-    cypher = await generate_cypher(question)
+    all_projects = project_id is None
+    cypher = await generate_cypher(question, all_projects=all_projects)
 
     if not is_read_only(cypher):
         logger.warning(f"query_graph: rejected write-containing query, retrying once: {cypher!r}")
-        cypher = await generate_cypher(question, retry_after_rejection=True)
+        cypher = await generate_cypher(question, retry_after_rejection=True, all_projects=all_projects)
         if not is_read_only(cypher):
             logger.warning(f"query_graph: retry still contained a write clause: {cypher!r}")
             return (
@@ -176,7 +194,9 @@ async def query_graph(question: str, project_id: str) -> str:
             )
 
     try:
-        rows = await run_readonly_query(cypher, project_id)
+        # Bind an empty project_id in all-projects mode — the prompt forbids
+        # referencing it, and an unreferenced bound parameter is harmless.
+        rows = await run_readonly_query(cypher, project_id or "")
     except Exception as e:
         logger.warning(f"query_graph: execution failed for {cypher!r}: {e}")
         return f"I couldn't run that query against the memory graph: {e}"

@@ -29,7 +29,9 @@ class Transcriber:
         """
         segments, _ = self._model.transcribe(
             str(audio_path),
-            beam_size=5,
+            # Greedy decoding (beam 1) is ~2-3x faster than beam 5; short
+            # dictations and voice commands rarely benefit from a wider beam.
+            beam_size=1,
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 300},
         )

@@ -28,6 +28,7 @@ class Role:
     label: str
     description: str            # shown in the UI and fed to the classifier
     uses_cheap_model: bool = False
+    classifiable: bool = True   # False = never a classifier outcome (assignment-only roles like voice)
 
 
 ROLES: dict[str, Role] = {r.id: r for r in [
@@ -56,6 +57,13 @@ ROLES: dict[str, Role] = {r.id: r for r in [
         "agentic", "Agentic & Tools",
         "tasks that require actions: reading or writing files, exporting documents, "
         "searching the user's memory or notes",
+    ),
+    Role(
+        "voice", "Voice Commands",
+        "spoken commands relayed from anywhere on the Mac — latency-sensitive, "
+        "so they default to the budget model",
+        uses_cheap_model=True,
+        classifiable=False,
     ),
 ]}
 

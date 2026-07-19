@@ -21,21 +21,25 @@ def store_memory(text: str, metadata: dict, entry_id: str | None = None) -> str:
     return eid
 
 
-def search_memory(query: str, project_id: str, n_results: int = 5) -> list[dict]:
+def search_memory(query: str, project_id: str | None, n_results: int = 5) -> list[dict]:
     """Return the top-n semantically similar memory entries for a query,
     scoped to a single project so recall never crosses project boundaries.
+    project_id=None searches across ALL projects — used by voice commands,
+    which have no project context of their own.
 
     Each result includes an 'id' field so callers can reinforce the
     matching Neo4j Episode nodes.
     """
     collection = get_or_create_collection()
     try:
-        results = collection.query(
-            query_texts=[query],
-            n_results=n_results,
-            where={"project_id": project_id},
-            include=["documents", "metadatas", "distances"],
-        )
+        kwargs = {
+            "query_texts": [query],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if project_id is not None:
+            kwargs["where"] = {"project_id": project_id}
+        results = collection.query(**kwargs)
         items = []
         for eid, doc, meta, dist in zip(
             results["ids"][0],

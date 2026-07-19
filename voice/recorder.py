@@ -155,6 +155,7 @@ class HotkeyListener:
             self._command_active = True
             self._command_ctx = command_mode.capture_context()
             self._recorder.start()
+            command_mode.earcon("Tink")  # "listening"
             return
 
         if HOTKEY.issubset(self._pressed) and not self._combo_fired:
@@ -220,9 +221,11 @@ class HotkeyListener:
             text = self._transcriber.transcribe(path)
             if not text:
                 print("[Voice] (no speech detected)")
+                command_mode.notify("No speech detected.")
                 return
             print(f"[Voice] Command ({ctx.app_name or 'unknown app'}): {text}")
             print("[Voice] Asking ARIA…")
+            command_mode.notify(f'Heard: "{text}" — thinking…')
             reply = command_mode.send_command(text, ctx)
             if reply:
                 print(f"[Voice] Pasting ARIA's reply ({len(reply)} chars).")

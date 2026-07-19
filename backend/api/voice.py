@@ -89,12 +89,16 @@ async def voice_command(
             503,
             "No AI provider configured. Add an API key in ARIA's Settings first.",
         )
-    provider, model = resolve_role("agentic")
+    # The dedicated voice role defaults to the budget model — voice is
+    # latency-sensitive — and is reassignable in Settings → Task Roles.
+    provider, model = resolve_role("voice")
 
     convo = await _get_or_create_voice_conversation(db)
 
-    # Same memory recall the chat pipeline uses, scoped to the Default project.
-    memories = search_memory(req.transcript, convo.project_id, n_results=3)
+    # Same memory recall the chat pipeline uses, but across ALL projects —
+    # a voice command arrives with no project context, and fencing it into
+    # the Default project would hide the user's real memories from it.
+    memories = search_memory(req.transcript, None, n_results=3)
     memory_context = ""
     if memories:
         snippets = "\n".join(f"- {m['text']}" for m in memories)
@@ -119,8 +123,9 @@ async def voice_command(
         {"role": "user", "content": req.transcript},
     ]
 
+    # project_id=None gives the query_graph tool all-projects scope too.
     reply, tools_used = await run_agentic_loop(
-        provider, model, messages, ALL_TOOLS, convo.project_id, role="agentic"
+        provider, model, messages, ALL_TOOLS, None, role="agentic"
     )
 
     # Persist like a chat turn so voice commands are browsable and remembered.

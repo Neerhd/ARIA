@@ -13,7 +13,9 @@ _MAX_CLASSIFY_CHARS = 600
 
 
 def _build_prompt(message: str, has_file: bool) -> str:
-    categories = "\n".join(f"- {r.id}: {r.description}" for r in ROLES.values())
+    categories = "\n".join(
+        f"- {r.id}: {r.description}" for r in ROLES.values() if r.classifiable
+    )
     file_note = "\n(The user attached a file to this message.)" if has_file else ""
     snippet = message[:_MAX_CLASSIFY_CHARS].replace("\n", " ")
     return (
@@ -26,10 +28,10 @@ def _build_prompt(message: str, has_file: bool) -> str:
 
 def _parse(raw: str) -> str | None:
     text = raw.strip().lower()
-    if text in ROLES:
+    if text in ROLES and ROLES[text].classifiable:
         return text
-    for role_id in ROLES:
-        if role_id in text:
+    for role_id, role in ROLES.items():
+        if role.classifiable and role_id in text:
             return role_id
     return None
 

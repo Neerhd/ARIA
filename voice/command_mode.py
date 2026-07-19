@@ -75,6 +75,18 @@ def earcon(sound: str = "Pop") -> None:
     )
 
 
+def notify(message: str, title: str = "ARIA Voice") -> None:
+    """Fire-and-forget macOS notification — visible progress while ARIA
+    thinks, since a paste-based flow has no typing indicator."""
+    msg = message.replace("\\", "\\\\").replace('"', '\\"')[:150]
+    ttl = title.replace("\\", "\\\\").replace('"', '\\"')
+    subprocess.Popen(
+        ["osascript", "-e", f'display notification "{msg}" with title "{ttl}"'],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def send_command(transcript: str, ctx: CommandContext) -> Optional[str]:
     """POST the command to ARIA. Returns the paste-ready reply, or None on
     failure (error sound played, nothing gets pasted; the caller still
@@ -92,7 +104,9 @@ def send_command(transcript: str, ctx: CommandContext) -> Optional[str]:
         if reply:
             return reply
         print("[Voice] ARIA returned an empty reply.")
+        notify("ARIA returned an empty reply.")
     except requests.RequestException as e:
         print(f"[Voice] ARIA request failed: {e}")
+        notify("Couldn't reach ARIA — is the backend running?")
     earcon("Basso")
     return None
