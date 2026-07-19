@@ -105,6 +105,19 @@ async def run_consolidation(triggered_by: str = "manual") -> dict:
             ok = await store_reflection(reflection_id, concept, reflection_text, episode_ids)
 
             if ok:
+                # Memory v2: index the reflection into ChromaDB so nightly
+                # synthesis actually informs future recall, not just the
+                # Memory Browser.
+                from services.memory_service import store_memory
+                store_memory(
+                    f"Reflection ({concept}): {reflection_text}",
+                    {
+                        "project_id": cluster["project_id"],
+                        "type": "reflection",
+                        "concept": concept,
+                    },
+                    entry_id=reflection_id,
+                )
                 results["reflections_created"] += 1
                 results["details"].append({
                     "concept": concept,

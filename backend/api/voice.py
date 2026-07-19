@@ -36,7 +36,11 @@ _SYSTEM_PROMPT = (
     "meta-commentary about what you did, no code fences around the whole "
     "reply. Match the target app: plain prose for an email draft, a tidy "
     "list for notes. The transcript comes from speech recognition, so "
-    "tolerate small mis-transcriptions and infer the intended words."
+    "tolerate small mis-transcriptions and infer the intended words. "
+    "Memory grounding: any claim about the user's past conversations, "
+    "preferences, or personal facts must be backed by the pinned facts, "
+    "retrieved memories, or a query_graph result — if none contain it, say "
+    "you don't have it in your memory rather than inventing a recollection."
 )
 
 _TOOL_NOTE = (
@@ -101,8 +105,16 @@ async def voice_command(
     memories = search_memory(req.transcript, None, n_results=3)
     memory_context = ""
     if memories:
-        snippets = "\n".join(f"- {m['text']}" for m in memories)
-        memory_context = f"\nRelevant past context:\n{snippets}"
+        lines = []
+        for m in memories:
+            meta = m.get("metadata") or {}
+            date = (meta.get("timestamp") or "")[:10] or "undated"
+            kind = "Reflection" if meta.get("type") == "reflection" else "Past exchange"
+            lines.append(f"- [{date}] ({kind}) {m['text']}")
+        memory_context = (
+            "\nMemories retrieved for this command — the only source of truth "
+            "about past conversations:\n" + "\n".join(lines)
+        )
     pinned_facts = await get_pinned_facts()
     if pinned_facts:
         lines = "\n".join(f"- {f['text']}" for f in pinned_facts)

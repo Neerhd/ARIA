@@ -33,6 +33,12 @@ SYSTEM_PROMPT = (
     "code blocks (with a language tag), and bold/italic emphasis whenever they genuinely "
     "improve clarity (e.g. comparisons, steps, structured data, code). Don't force structure "
     "onto a short conversational reply that reads better as plain prose."
+    "\n\nMemory grounding: any claim about the user's past conversations, "
+    "preferences, or personal facts must be backed by the pinned facts, the "
+    "retrieved memories provided to you, or a query_graph result. If none of "
+    "those contain it, say you don't have it in your memory — never invent a "
+    "recollection. When citing a memory, you may mention its date. General "
+    "world knowledge is unaffected by this rule."
 )
 
 # Matches phrases like "remember this", "save that", "don't forget", etc.
@@ -177,8 +183,16 @@ async def send_message(
 
     memory_context = ""
     if memories:
-        snippets = [m["text"] for m in memories]
-        memory_context = "\nRelevant past context:\n" + "\n".join(f"- {s}" for s in snippets)
+        lines = []
+        for m in memories:
+            meta = m.get("metadata") or {}
+            date = (meta.get("timestamp") or "")[:10] or "undated"
+            kind = "Reflection" if meta.get("type") == "reflection" else "Past exchange"
+            lines.append(f"- [{date}] ({kind}) {m['text']}")
+        memory_context = (
+            "\nMemories retrieved for this message — the only source of truth "
+            "about past conversations:\n" + "\n".join(lines)
+        )
 
     # ── Inject pinned facts (always present in every turn) ─────────────────────
     pinned_facts = await get_pinned_facts()
@@ -190,7 +204,9 @@ async def send_message(
     # retrieved above, no new retrieval, no full prompt/response text ─────────
     sources: list[dict] = []
     if recalled_ids:
-        for e in await get_episodes_by_ids(recalled_ids):
+        episodes = await get_episodes_by_ids(recalled_ids)
+        episode_ids = {e["id"] for e in episodes}
+        for e in episodes:
             prompt = e.get("prompt") or ""
             sources.append({
                 "type": "episode",
@@ -198,6 +214,18 @@ async def send_message(
                 "label": prompt[:80] + ("…" if len(prompt) > 80 else ""),
                 "timestamp": e.get("timestamp"),
             })
+        # Recalled reflections aren't Episode nodes — cite them from their
+        # Chroma metadata instead.
+        for m in memories:
+            meta = m.get("metadata") or {}
+            if m["id"] not in episode_ids and meta.get("type") == "reflection":
+                text = m.get("text") or ""
+                sources.append({
+                    "type": "reflection",
+                    "ref_id": m["id"],
+                    "label": text[:80] + ("…" if len(text) > 80 else ""),
+                    "timestamp": meta.get("timestamp"),
+                })
     for f in pinned_facts:
         text = f.get("text") or ""
         sources.append({
