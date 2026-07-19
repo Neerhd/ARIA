@@ -79,6 +79,27 @@ _TOOL_DEFS = {
             },
         },
     },
+    "calendar": {
+        "type": "function",
+        "function": {
+            "name": "calendar",
+            "description": (
+                "Read the user's upcoming macOS Calendar events (read-only). "
+                "Use this whenever a task depends on the user's schedule or "
+                "availability — meetings, free slots, upcoming commitments."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days_ahead": {
+                        "type": "integer",
+                        "description": "How many days ahead to look (default 7, max 30).",
+                    }
+                },
+                "required": [],
+            },
+        },
+    },
     "query_graph": {
         "type": "function",
         "function": {
@@ -335,6 +356,15 @@ async def _exec_file_writer(args: dict) -> str:
         return f"Error writing file: {e}"
 
 
+async def _exec_calendar(args: dict) -> str:
+    from services.calendar_service import get_upcoming_events
+    try:
+        days = max(1, min(int(args.get("days_ahead") or 7), 30))
+    except (TypeError, ValueError):
+        days = 7
+    return await get_upcoming_events(days)
+
+
 async def execute_tool(name: str, args: dict, project_id: str | None = None) -> str:
     """Dispatch a tool call by name and return its string result."""
     if name == "file_reader":
@@ -343,6 +373,8 @@ async def execute_tool(name: str, args: dict, project_id: str | None = None) -> 
         return await _exec_file_writer(args)
     if name == "web_search":
         return await _exec_web_search(args)
+    if name == "calendar":
+        return await _exec_calendar(args)
     if name == "query_graph":
         return await _exec_query_graph(args, project_id)
     return f"Unknown tool: {name}"

@@ -240,6 +240,10 @@ async def send_message(
             "Use this instead of guessing when asked what was discussed before, how often, "
             "or how topics relate."
         ),
+        "calendar": (
+            "read the user's upcoming macOS Calendar events via calendar(days_ahead). "
+            "Use this whenever a request depends on the user's schedule or availability."
+        ),
     }
     cap_lines = "\n".join(
         f"  - {_TOOL_CAPS[t]}" for t in tools_enabled if t in _TOOL_CAPS

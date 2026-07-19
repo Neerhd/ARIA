@@ -12,6 +12,7 @@ from api.consolidation import router as consolidation_router, run_consolidation_
 from api.router import router as router_router
 from api.projects import router as projects_router
 from api.graph import router as graph_router
+from api.voice import router as voice_router
 from services.usage_service import usage_writer
 import asyncio
 import logging
@@ -79,6 +80,7 @@ app.include_router(consolidation_router)
 app.include_router(router_router)
 app.include_router(projects_router)
 app.include_router(graph_router)
+app.include_router(voice_router)
 
 
 @app.get("/")

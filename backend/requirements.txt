@@ -26,3 +26,6 @@ openpyxl==3.1.5
 
 # Utilities
 python-multipart==0.0.20
+
+# macOS Calendar (read-only calendar tool)
+pyobjc-framework-EventKit==11.0
