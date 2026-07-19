@@ -7,7 +7,7 @@ from models.schemas import (
 )
 from database.sqlite import get_db
 from services.memory_service import store_memory, bump_recall_counts
-from services.recall_service import recall, format_time_block
+from services.recall_service import recall, format_memory_block, format_time_block
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
     store_fact, get_pinned_facts, get_episodes_by_ids,
@@ -18,7 +18,7 @@ from services.fact_service import extract_and_store_facts, build_profile_context
 from services.router_service import default_provider, default_model, is_configured, PROVIDERS
 from services.role_service import resolve_role
 from services.role_classifier_service import classify_role
-from services.tool_service import run_agentic_loop, ALL_TOOLS
+from services.tool_service import run_agentic_loop, build_tool_instruction, ALL_TOOLS
 import uuid
 import json
 import re
@@ -190,18 +190,7 @@ async def send_message(
         background_tasks.add_task(reinforce, recalled_ids)
         background_tasks.add_task(bump_recall_counts, recalled_ids)
 
-    memory_context = ""
-    if memories:
-        lines = []
-        for m in memories:
-            meta = m.get("metadata") or {}
-            date = (meta.get("timestamp") or "")[:10] or "undated"
-            kind = "Reflection" if meta.get("type") == "reflection" else "Past exchange"
-            lines.append(f"- [{date}] ({kind}) {m['text']}")
-        memory_context = (
-            "\nMemories retrieved for this message — the only source of truth "
-            "about past conversations:\n" + "\n".join(lines)
-        )
+    memory_context = format_memory_block(memories, "message")
 
     if recall_result["time_label"]:
         memory_context += format_time_block(
@@ -267,49 +256,11 @@ async def send_message(
             "Briefly confirm you've saved it to permanent memory — one sentence is enough.]"
         )
 
-    # ── Build tool-capability instruction (overrides trained refusals) ────────
+    # ── Tool-capability instruction (overrides trained refusals) ──────────────
     # Tools are always available — the model decides per-message whether one
     # is actually relevant via function-calling, same as any other capability.
     tools_enabled = ALL_TOOLS
-    import getpass as _gp
-    from pathlib import Path as _P
-    _username = _gp.getuser()
-    _home = str(_P.home())
-    _TOOL_CAPS = {
-        "web_search":  "search the web for current information via web_search(query)",
-        "file_reader": f"read any local file by absolute path via file_reader(path). Home directory: {_home}",
-        "file_writer": (
-            f"create and write files to any absolute path via file_writer(path, content). "
-            f"Home directory: {_home}. Username: {_username}. "
-            f"Example Desktop path: {_home}/Desktop/filename.txt. "
-            "Supported formats: .txt .md .html .json .csv .py and any text format (written as-is); "
-            ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
-            ".xlsx (markdown table or CSV → spreadsheet). "
-            "Always write content as Markdown — the system converts it to the target format automatically."
-        ),
-        "query_graph": (
-            "ask a natural-language question about the user's memory graph — past "
-            "conversations, topics, and synthesised patterns — via query_graph(question). "
-            "Use this instead of guessing when asked what was discussed before, how often, "
-            "or how topics relate."
-        ),
-        "calendar": (
-            "read the user's upcoming macOS Calendar events via calendar(days_ahead). "
-            "Use this whenever a request depends on the user's schedule or availability."
-        ),
-    }
-    cap_lines = "\n".join(
-        f"  - {_TOOL_CAPS[t]}" for t in tools_enabled if t in _TOOL_CAPS
-    )
-    tool_instruction = (
-        "\n\nYou have the following tools and MUST use them — never claim you cannot "
-        "perform an action that one of your tools can do:\n"
-        + cap_lines
-        + f"\nSystem info: username={_username}, home={_home}"
-        + "\nIMPORTANT: Always use absolute paths. Never use shell substitutions like $(whoami) or $USER — use the literal values above."
-        + "\nDo not ask the user to do things manually if a tool can do it. "
-        "Call the appropriate tool directly and confirm the result to the user."
-    )
+    tool_instruction = build_tool_instruction(tools_enabled)
 
     # ── Build messages for the model ───────────────────────────────────────────
     if req.file_content:
@@ -391,8 +342,6 @@ async def send_message(
         model=model,
         provider=provider,
         role=role,
-        tier=1,
-        signals=[],
         tools_used=tools_used,
         sources=sources,
     )

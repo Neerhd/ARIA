@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.sqlite import get_db
 from models.schemas import Conversation, Message
 from services.memory_service import store_memory
-from services.recall_service import recall, format_time_block
+from services.recall_service import recall, format_memory_block, format_time_block
 from services.fact_service import extract_and_store_facts, build_profile_context
 from services.project_service import get_or_create_default_project
 from services.role_service import resolve_role
@@ -111,18 +111,7 @@ async def voice_command(
         req.transcript, None, extra_context=extra_context, n_results=3
     )
     memories = recall_result["memories"]
-    memory_context = ""
-    if memories:
-        lines = []
-        for m in memories:
-            meta = m.get("metadata") or {}
-            date = (meta.get("timestamp") or "")[:10] or "undated"
-            kind = "Reflection" if meta.get("type") == "reflection" else "Past exchange"
-            lines.append(f"- [{date}] ({kind}) {m['text']}")
-        memory_context = (
-            "\nMemories retrieved for this command — the only source of truth "
-            "about past conversations:\n" + "\n".join(lines)
-        )
+    memory_context = format_memory_block(memories, "command")
 
     if recall_result["time_label"]:
         memory_context += format_time_block(

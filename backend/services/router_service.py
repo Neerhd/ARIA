@@ -13,6 +13,25 @@ logger = logging.getLogger(__name__)
 
 _ANTHROPIC_VERSION = "2023-06-01"
 
+# One shared client with connection pooling — a client per request would
+# pay TCP+TLS setup on every model call. Closed via close_http_client()
+# in main's lifespan shutdown.
+_http_client: httpx.AsyncClient | None = None
+
+
+def _http() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=120.0)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
 
 @dataclass(frozen=True)
 class Provider:
@@ -228,18 +247,17 @@ async def _call_anthropic(
     payload: dict = {"model": model, "max_tokens": max_tokens, "messages": msgs}
     if system:
         payload["system"] = system
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(
-            f"{provider.base_url}/messages",
-            headers=_anthropic_headers(provider),
-            json=payload,
-        )
-        if not r.is_success:
-            raise _provider_error(provider, r.status_code, r.text)
-        data = r.json()
-        blocks = data.get("content", [])
-        text = "\n".join(b["text"] for b in blocks if b.get("type") == "text")
-        return text, data.get("usage") or {}
+    r = await _http().post(
+        f"{provider.base_url}/messages",
+        headers=_anthropic_headers(provider),
+        json=payload,
+    )
+    if not r.is_success:
+        raise _provider_error(provider, r.status_code, r.text)
+    data = r.json()
+    blocks = data.get("content", [])
+    text = "\n".join(b["text"] for b in blocks if b.get("type") == "text")
+    return text, data.get("usage") or {}
 
 
 async def _call_anthropic_with_tools(
@@ -253,14 +271,13 @@ async def _call_anthropic_with_tools(
     if tools:
         payload["tools"] = _convert_tools_to_anthropic(tools)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(
-            f"{provider.base_url}/messages",
-            headers=_anthropic_headers(provider),
-            json=payload,
-        )
-        if not r.is_success:
-            raise _provider_error(provider, r.status_code, r.text)
+    r = await _http().post(
+        f"{provider.base_url}/messages",
+        headers=_anthropic_headers(provider),
+        json=payload,
+    )
+    if not r.is_success:
+        raise _provider_error(provider, r.status_code, r.text)
 
     data = r.json()
     blocks = data.get("content", [])
@@ -287,16 +304,15 @@ def _openai_headers(provider: Provider) -> dict:
 async def _call_openai_compat(
     provider: Provider, model: str, messages: list[dict]
 ) -> tuple[str, dict]:
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(
-            f"{provider.base_url}/chat/completions",
-            headers=_openai_headers(provider),
-            json={"model": model, "messages": messages},
-        )
-        if not r.is_success:
-            raise _provider_error(provider, r.status_code, r.text)
-        data = r.json()
-        return data["choices"][0]["message"]["content"] or "", data.get("usage") or {}
+    r = await _http().post(
+        f"{provider.base_url}/chat/completions",
+        headers=_openai_headers(provider),
+        json={"model": model, "messages": messages},
+    )
+    if not r.is_success:
+        raise _provider_error(provider, r.status_code, r.text)
+    data = r.json()
+    return data["choices"][0]["message"]["content"] or "", data.get("usage") or {}
 
 
 async def _call_openai_compat_with_tools(
@@ -306,14 +322,13 @@ async def _call_openai_compat_with_tools(
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(
-            f"{provider.base_url}/chat/completions",
-            headers=_openai_headers(provider),
-            json=payload,
-        )
-        if not r.is_success:
-            raise _provider_error(provider, r.status_code, r.text)
+    r = await _http().post(
+        f"{provider.base_url}/chat/completions",
+        headers=_openai_headers(provider),
+        json=payload,
+    )
+    if not r.is_success:
+        raise _provider_error(provider, r.status_code, r.text)
     data = r.json()
     choice_msg = data["choices"][0]["message"]
     content = choice_msg.get("content") or ""

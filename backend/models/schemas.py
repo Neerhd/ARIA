@@ -46,14 +46,11 @@ class ChatRequest(BaseModel):
     message: str = Field("", max_length=8000)
     conversation_id: Optional[str] = None
     project_id: Optional[str] = None     # falls back to the Default project when omitted
-    stream: bool = False
     file_content: Optional[str] = None
     file_name: Optional[str] = None
     routing_mode: Optional[str] = None       # "auto" | "manual" ("ask" accepted but treated as auto)
     override_provider: Optional[str] = None  # manual pick: provider id (with override_model, bypasses classification)
     override_model: Optional[str] = None     # manual pick: exact model id on that provider
-    override_tier: Optional[int] = None      # legacy tier field — accepted and ignored until the Phase 3 frontend update
-    tier_cap: Optional[int] = None           # legacy tier field — accepted and ignored until the Phase 3 frontend update
 
     def effective_message(self) -> str:
         if self.message.strip():
@@ -70,13 +67,8 @@ class ChatResponse(BaseModel):
     model: str
     provider: Optional[str] = None
     role: Optional[str] = None   # classified task role (None in manual mode / on classifier failure)
-    tier: int = 1
-    signals: list[str] = []
     tools_used: list[str] = []
     sources: list[dict] = []
-    permission_required: bool = False
-    suggested_tier: Optional[int] = None
-    suggested_model: Optional[str] = None
 
 
 class ConversationOut(BaseModel):

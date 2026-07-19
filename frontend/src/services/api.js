@@ -1,5 +1,38 @@
 const BASE = "/api";
 
+// ─── Request helpers ──────────────────────────────────────────────────────────
+// Two error styles exist across the app, both preserved:
+// - request(): throws Error(detail from the backend, or a status fallback) —
+//   for actions where the UI surfaces the failure.
+// - requestOr(): returns a fallback value on any failure — for best-effort
+//   reads where the UI just renders an empty state.
+
+async function request(path, { method = "GET", body, errorMessage } = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    ...(body !== undefined && {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  });
+  if (!res.ok) {
+    if (errorMessage) throw new Error(errorMessage);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+  return res.json();
+}
+
+async function requestOr(path, fallback) {
+  try {
+    return await request(path);
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
 export async function sendMessage(
   message,
   conversationId = null,
@@ -18,25 +51,13 @@ export async function sendMessage(
     body.override_model = overrideModel;
   }
   if (projectId) body.project_id = projectId;
-  const res = await fetch(`${BASE}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request("/chat", { method: "POST", body });
 }
 
 export async function uploadFile(file) {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${BASE}/files/upload`, {
-    method: "POST",
-    body: formData,
-  });
+  const res = await fetch(`${BASE}/files/upload`, { method: "POST", body: formData });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Upload failed ${res.status}`);
@@ -46,201 +67,112 @@ export async function uploadFile(file) {
 
 export async function fetchConversations(projectId = null) {
   const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
-  const res = await fetch(`${BASE}/chat/conversations${qs}`);
-  if (!res.ok) throw new Error("Failed to load conversations");
-  return res.json();
+  return request(`/chat/conversations${qs}`, { errorMessage: "Failed to load conversations" });
 }
 
 export async function setConversationPinned(conversationId, pinned) {
-  const res = await fetch(`${BASE}/chat/conversations/${conversationId}`, {
+  return request(`/chat/conversations/${conversationId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pinned }),
+    body: { pinned },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function fetchMessages(conversationId) {
-  const res = await fetch(`${BASE}/chat/conversations/${conversationId}/messages`);
-  if (!res.ok) throw new Error("Failed to load messages");
-  return res.json();
+  return request(`/chat/conversations/${conversationId}/messages`, {
+    errorMessage: "Failed to load messages",
+  });
 }
 
-export async function checkHealth() {
-  const res = await fetch(`${BASE}/health`);
-  if (!res.ok) return null;
-  return res.json();
-}
+// ─── Memory ───────────────────────────────────────────────────────────────────
 
 export async function fetchMemoryEpisodes(projectId, limit = 20) {
-  const res = await fetch(`${BASE}/memory/episodes?project_id=${encodeURIComponent(projectId)}&limit=${limit}`);
-  if (!res.ok) return [];
-  return res.json();
+  return requestOr(`/memory/episodes?project_id=${encodeURIComponent(projectId)}&limit=${limit}`, []);
 }
 
 export async function fetchMemoryConcepts(projectId, limit = 40) {
-  const res = await fetch(`${BASE}/memory/concepts?project_id=${encodeURIComponent(projectId)}&limit=${limit}`);
-  if (!res.ok) return [];
-  return res.json();
+  return requestOr(`/memory/concepts?project_id=${encodeURIComponent(projectId)}&limit=${limit}`, []);
 }
 
 export async function fetchMemoryStats(projectId) {
-  const res = await fetch(`${BASE}/memory/stats?project_id=${encodeURIComponent(projectId)}`);
-  if (!res.ok) return {};
-  return res.json();
+  return requestOr(`/memory/stats?project_id=${encodeURIComponent(projectId)}`, {});
 }
 
 export async function fetchGraph(projectId, scope = "project") {
   const qs = scope === "all"
     ? "scope=all"
     : `project_id=${encodeURIComponent(projectId)}&scope=project`;
-  const res = await fetch(`${BASE}/graph?${qs}`);
-  if (!res.ok) return { nodes: [], edges: [] };
-  return res.json();
+  return requestOr(`/graph?${qs}`, { nodes: [], edges: [] });
 }
 
 export async function fetchReflections(projectId, limit = 20) {
-  const res = await fetch(`${BASE}/consolidation/reflections?project_id=${encodeURIComponent(projectId)}&limit=${limit}`);
-  if (!res.ok) return [];
-  return res.json();
+  return requestOr(`/consolidation/reflections?project_id=${encodeURIComponent(projectId)}&limit=${limit}`, []);
 }
 
 export async function fetchPinnedFacts() {
-  const res = await fetch(`${BASE}/memory/pinned`);
-  if (!res.ok) return [];
-  return res.json();
+  return requestOr("/memory/pinned", []);
 }
 
 export async function deletePinnedFact(factId) {
-  const res = await fetch(`${BASE}/memory/pinned/${factId}`, { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request(`/memory/pinned/${factId}`, { method: "DELETE" });
 }
+
+// ─── Consolidation ────────────────────────────────────────────────────────────
 
 export async function fetchConsolidationRuns(limit = 5) {
-  const res = await fetch(`${BASE}/consolidation/runs?limit=${limit}`);
-  if (!res.ok) return [];
-  return res.json();
-}
-
-export async function fetchRouterConfig() {
-  const res = await fetch(`${BASE}/router/config`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
-export async function fetchUsage(days = 7) {
-  const res = await fetch(`${BASE}/router/usage?days=${days}`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
-export async function fetchRoles() {
-  const res = await fetch(`${BASE}/router/roles`);
-  if (!res.ok) return null;
-  return res.json(); // { roles: { role_id: { label, description, provider, model, overridden } } }
-}
-
-export async function assignRole(roleId, provider, model) {
-  const res = await fetch(`${BASE}/router/roles/${roleId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, model }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function resetRole(roleId) {
-  const res = await fetch(`${BASE}/router/roles/${roleId}`, { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function setProviderKey(providerId, key) {
-  const res = await fetch(`${BASE}/router/providers/${providerId}/key`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function removeProviderKey(providerId) {
-  const res = await fetch(`${BASE}/router/providers/${providerId}/key`, { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return requestOr(`/consolidation/runs?limit=${limit}`, []);
 }
 
 export async function triggerConsolidation() {
-  const res = await fetch(`${BASE}/consolidation/run`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request("/consolidation/run", { method: "POST" });
 }
 
+// ─── Router: providers, roles, usage ──────────────────────────────────────────
+
+export async function fetchRouterConfig() {
+  return requestOr("/router/config", null);
+}
+
+export async function fetchUsage(days = 7) {
+  return requestOr(`/router/usage?days=${days}`, null);
+}
+
+export async function fetchRoles() {
+  return requestOr("/router/roles", null);
+}
+
+export async function assignRole(roleId, provider, model) {
+  return request(`/router/roles/${roleId}`, { method: "PUT", body: { provider, model } });
+}
+
+export async function resetRole(roleId) {
+  return request(`/router/roles/${roleId}`, { method: "DELETE" });
+}
+
+export async function setProviderKey(providerId, key) {
+  return request(`/router/providers/${providerId}/key`, { method: "PUT", body: { key } });
+}
+
+export async function removeProviderKey(providerId) {
+  return request(`/router/providers/${providerId}/key`, { method: "DELETE" });
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
 export async function fetchProjects() {
-  const res = await fetch(`${BASE}/projects`);
-  if (!res.ok) throw new Error("Failed to load projects");
-  return res.json();
+  return request("/projects", { errorMessage: "Failed to load projects" });
 }
 
 export async function createProject(name, description = null) {
-  const res = await fetch(`${BASE}/projects`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, description }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request("/projects", { method: "POST", body: { name, description } });
 }
 
 export async function updateProject(projectId, { name, description } = {}) {
   const body = {};
   if (name != null) body.name = name;
   if (description != null) body.description = description;
-  const res = await fetch(`${BASE}/projects/${projectId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request(`/projects/${projectId}`, { method: "PATCH", body });
 }
 
 export async function deleteProject(projectId) {
-  const res = await fetch(`${BASE}/projects/${projectId}`, { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Server error ${res.status}`);
-  }
-  return res.json();
+  return request(`/projects/${projectId}`, { method: "DELETE" });
 }

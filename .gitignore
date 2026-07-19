@@ -29,6 +29,10 @@ logs/
 .pids/
 voice/recordings/
 
+# Vendored SearXNG tree — cloned and configured by scripts/install.sh,
+# never committed (third-party source, ~128MB)
+searxng/
+
 # macOS
 .DS_Store
 .AppleDouble

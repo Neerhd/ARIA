@@ -96,6 +96,24 @@ async def recall(
     }
 
 
+def format_memory_block(memories: list[dict], context_word: str = "message") -> str:
+    """Render recalled memories for the system prompt — dated, typed, and
+    framed as the only source of truth about the past. Shared by chat
+    ("message") and voice ("command")."""
+    if not memories:
+        return ""
+    lines = []
+    for m in memories:
+        meta = m.get("metadata") or {}
+        date = (meta.get("timestamp") or "")[:10] or "undated"
+        kind = "Reflection" if meta.get("type") == "reflection" else "Past exchange"
+        lines.append(f"- [{date}] ({kind}) {m['text']}")
+    return (
+        f"\nMemories retrieved for this {context_word} — the only source of "
+        "truth about past conversations:\n" + "\n".join(lines)
+    )
+
+
 def format_time_block(time_label: str, time_episodes: list[dict]) -> str:
     """Render date-window episodes for the system prompt."""
     if not time_episodes:

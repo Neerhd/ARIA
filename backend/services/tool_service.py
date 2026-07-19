@@ -128,10 +128,56 @@ _TOOL_DEFS = {
 
 ALL_TOOLS = list(_TOOL_DEFS.keys())
 
+# Human-phrased capability lines for the system prompt — they override
+# trained "I can't access files" refusals. Kept next to _TOOL_DEFS so a new
+# tool gets its schema and its capability line in one place.
+_TOOL_CAPS = {
+    "web_search": "search the web for current information via web_search(query)",
+    "file_reader": None,   # composed below — needs the runtime home path
+    "file_writer": None,
+    "query_graph": (
+        "ask a natural-language question about the user's memory graph — past "
+        "conversations, topics, and synthesised patterns — via query_graph(question). "
+        "Use this instead of guessing when asked what was discussed before, how often, "
+        "or how topics relate."
+    ),
+    "calendar": (
+        "read the user's upcoming macOS Calendar events via calendar(days_ahead). "
+        "Use this whenever a request depends on the user's schedule or availability."
+    ),
+}
+
 
 def build_tool_definitions(tools_enabled: list[str]) -> list[dict]:
     """Return OpenAI-style tool definition objects for the enabled tool names."""
     return [_TOOL_DEFS[t] for t in tools_enabled if t in _TOOL_DEFS]
+
+
+def build_tool_instruction(tools_enabled: list[str]) -> str:
+    """The system-prompt block describing the enabled tools (used by chat)."""
+    caps = dict(_TOOL_CAPS)
+    caps["file_reader"] = (
+        f"read any local file by absolute path via file_reader(path). Home directory: {_HOME}"
+    )
+    caps["file_writer"] = (
+        f"create and write files to any absolute path via file_writer(path, content). "
+        f"Home directory: {_HOME}. Username: {_USERNAME}. "
+        f"Example Desktop path: {_HOME}/Desktop/filename.txt. "
+        "Supported formats: .txt .md .html .json .csv .py and any text format (written as-is); "
+        ".pdf (markdown → formatted PDF); .docx (markdown → Word doc with styles); "
+        ".xlsx (markdown table or CSV → spreadsheet). "
+        "Always write content as Markdown — the system converts it to the target format automatically."
+    )
+    cap_lines = "\n".join(f"  - {caps[t]}" for t in tools_enabled if caps.get(t))
+    return (
+        "\n\nYou have the following tools and MUST use them — never claim you cannot "
+        "perform an action that one of your tools can do:\n"
+        + cap_lines
+        + f"\nSystem info: username={_USERNAME}, home={_HOME}"
+        + "\nIMPORTANT: Always use absolute paths. Never use shell substitutions like $(whoami) or $USER — use the literal values above."
+        + "\nDo not ask the user to do things manually if a tool can do it. "
+        "Call the appropriate tool directly and confirm the result to the user."
+    )
 
 
 # ─── Tool executors ────────────────────────────────────────────────────────────

@@ -269,7 +269,6 @@ ARIA/
 │       │   ├── MessageList.jsx     # Message thread, retry-with-model menu, provenance citations
 │       │   ├── RouterSettings.jsx  # Settings sheet — routing mode, usage, roles, providers
 │       │   ├── Sidebar.jsx         # Conversation list, filtered to the active project
-│       │   ├── StatusBar.jsx       # Live service health dots
 │       │   ├── memory/             # Memory Browser tab contents (one file per tab + shared cards)
 │       │   ├── settings/           # Settings sheet sections (mode, usage, role assignments, provider keys)
 │       │   └── ui/                 # shadcn/ui primitives (Badge, Sheet, Tabs, AlertDialog, ScrollArea, Table, …)
