@@ -16,7 +16,7 @@ from database.sqlite import get_db
 from models.schemas import Conversation, Message
 from services.memory_service import store_memory
 from services.recall_service import recall, format_time_block
-from services.graph_service import get_pinned_facts
+from services.fact_service import extract_and_store_facts, build_profile_context
 from services.project_service import get_or_create_default_project
 from services.role_service import resolve_role
 from services.router_service import default_provider
@@ -128,10 +128,8 @@ async def voice_command(
         memory_context += format_time_block(
             recall_result["time_label"], recall_result["time_episodes"]
         )
-    pinned_facts = await get_pinned_facts()
-    if pinned_facts:
-        lines = "\n".join(f"- {f['text']}" for f in pinned_facts)
-        memory_context = f"\n\nPinned facts (always remember these):\n{lines}" + memory_context
+    profile_context = await build_profile_context()
+    memory_context = profile_context + memory_context
 
     context_lines = []
     if req.active_app_name:
@@ -168,6 +166,7 @@ async def voice_command(
     background_tasks.add_task(
         _store_episode_memory, episode_id, convo.id, stored_prompt, reply, convo.project_id
     )
+    background_tasks.add_task(extract_and_store_facts, req.transcript, reply)
 
     return VoiceCommandResponse(
         reply=reply, provider=provider, model=model, tools_used=tools_used

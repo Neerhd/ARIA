@@ -486,6 +486,88 @@ async def store_fact(fact_id: str, text: str, raw_message: str) -> bool:
         return False
 
 
+async def store_structured_fact(
+    fact_id: str,
+    category: str,
+    subject: str,
+    text: str,
+    raw_message: str = "",
+    source: str = "auto",
+) -> bool:
+    """Layer 4: create an auto-captured Fact and supersede any active fact
+    with the same category + subject (case-insensitive). Newer information
+    replaces older; superseded facts keep their history but are never
+    returned as current truth."""
+    try:
+        driver = await get_neo4j_driver()
+        now = datetime.now(timezone.utc).isoformat()
+        async with driver.session() as s:
+            # Containment counts as the same subject ("Zed Quimby" updates
+            # "contact Zed Quimby") — extractors phrase keys inconsistently.
+            # The length guard keeps tiny subjects from matching everything.
+            await s.run(
+                """
+                MATCH (old:Fact)
+                WHERE coalesce(old.status, 'active') = 'active'
+                  AND old.category = $category
+                  AND old.id <> $id
+                  AND (
+                    toLower(coalesce(old.subject, '')) = toLower($subject)
+                    OR (size($subject) >= 4
+                        AND toLower(coalesce(old.subject, '')) CONTAINS toLower($subject))
+                    OR (size(coalesce(old.subject, '')) >= 4
+                        AND toLower($subject) CONTAINS toLower(coalesce(old.subject, '')))
+                  )
+                SET old.status = 'superseded',
+                    old.superseded_at = $now,
+                    old.superseded_by = $id
+                """,
+                category=category, subject=subject, id=fact_id, now=now,
+            )
+            await s.run(
+                """
+                MERGE (f:Fact {id: $id})
+                ON CREATE SET
+                    f.text        = $text,
+                    f.raw_message = $raw_message,
+                    f.created_at  = $now,
+                    f.user_pinned = false,
+                    f.category    = $category,
+                    f.subject     = $subject,
+                    f.status      = 'active',
+                    f.source      = $source
+                """,
+                id=fact_id, text=text, raw_message=raw_message,
+                now=now, category=category, subject=subject, source=source,
+            )
+        return True
+    except Exception as e:
+        logger.warning(f"store_structured_fact failed: {e}")
+        return False
+
+
+async def get_active_facts() -> list[dict]:
+    """All facts currently believed true — user-pinned plus active
+    auto-captured ones. Superseded facts are never returned."""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (f:Fact)
+                WHERE coalesce(f.status, 'active') = 'active'
+                RETURN f.id AS id, f.text AS text, f.category AS category,
+                       f.subject AS subject, f.created_at AS created_at,
+                       coalesce(f.user_pinned, false) AS user_pinned
+                ORDER BY f.created_at ASC
+                """
+            )
+            return [dict(r) for r in await result.data()]
+    except Exception as e:
+        logger.warning(f"get_active_facts failed: {e}")
+        return []
+
+
 async def get_pinned_facts() -> list[dict]:
     """Return all user-pinned facts ordered oldest-first."""
     try:

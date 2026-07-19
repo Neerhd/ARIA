@@ -24,7 +24,11 @@ async def stats(project_id: str):
 
 @router.get("/pinned")
 async def pinned():
-    return await get_pinned_facts()
+    """The living profile: user-pinned facts plus active auto-captured
+    ones. Superseded facts are excluded. (Endpoint keeps its historical
+    name for frontend compatibility.)"""
+    from services.graph_service import get_active_facts
+    return await get_active_facts()
 
 
 @router.delete("/pinned/{fact_id}")

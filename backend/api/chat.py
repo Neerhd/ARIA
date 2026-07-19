@@ -14,6 +14,7 @@ from services.graph_service import (
 )
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
+from services.fact_service import extract_and_store_facts, build_profile_context
 from services.router_service import default_provider, default_model, is_configured, PROVIDERS
 from services.role_service import resolve_role
 from services.role_classifier_service import classify_role
@@ -207,11 +208,10 @@ async def send_message(
             recall_result["time_label"], recall_result["time_episodes"]
         )
 
-    # ── Inject pinned facts (always present in every turn) ─────────────────────
-    pinned_facts = await get_pinned_facts()
-    if pinned_facts:
-        lines = "\n".join(f"- {f['text']}" for f in pinned_facts)
-        memory_context = f"\n\nPinned facts (always remember these):\n{lines}" + memory_context
+    # ── Inject the living profile (Layer 4 — replaces the pinned-facts dump) ──
+    profile_context = await build_profile_context()
+    memory_context = profile_context + memory_context
+    pinned_facts = await get_pinned_facts()  # provenance citations only
 
     # ── Build lean provenance for this reply (M14) — surfaces what was already
     # retrieved above, no new retrieval, no full prompt/response text ─────────
@@ -378,6 +378,11 @@ async def send_message(
         reply,
         convo.project_id,
     )
+
+    # ── Layer 4 auto-capture — skipped when "remember this" already pinned
+    # the fact verbatim ────────────────────────────────────────────────────────
+    if not new_fact_text:
+        background_tasks.add_task(extract_and_store_facts, user_text, reply)
 
     return ChatResponse(
         reply=reply,
