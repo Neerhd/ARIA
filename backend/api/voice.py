@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.sqlite import get_db
 from models.schemas import Conversation, Message
-from services.memory_service import store_memory, search_memory
+from services.memory_service import store_memory
+from services.recall_service import recall, format_time_block
 from services.graph_service import get_pinned_facts
 from services.project_service import get_or_create_default_project
 from services.role_service import resolve_role
@@ -99,10 +100,17 @@ async def voice_command(
 
     convo = await _get_or_create_voice_conversation(db)
 
-    # Same memory recall the chat pipeline uses, but across ALL projects —
-    # a voice command arrives with no project context, and fencing it into
-    # the Default project would hide the user's real memories from it.
-    memories = search_memory(req.transcript, None, n_results=3)
+    # Layer-3 recall across ALL projects — a voice command arrives with no
+    # project context, and fencing it into the Default project would hide
+    # the user's real memories. The active app + selection join the recall
+    # cues: asking "how should I reply?" in Mail recalls mail-related memory.
+    extra_context = None
+    if req.active_app_name or req.selection_snapshot:
+        extra_context = f"{req.active_app_name or ''}: {(req.selection_snapshot or '')[:300]}"
+    recall_result = await recall(
+        req.transcript, None, extra_context=extra_context, n_results=3
+    )
+    memories = recall_result["memories"]
     memory_context = ""
     if memories:
         lines = []
@@ -114,6 +122,11 @@ async def voice_command(
         memory_context = (
             "\nMemories retrieved for this command — the only source of truth "
             "about past conversations:\n" + "\n".join(lines)
+        )
+
+    if recall_result["time_label"]:
+        memory_context += format_time_block(
+            recall_result["time_label"], recall_result["time_episodes"]
         )
     pinned_facts = await get_pinned_facts()
     if pinned_facts:

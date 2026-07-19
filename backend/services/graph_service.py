@@ -182,6 +182,37 @@ async def get_episodes_by_concepts(concepts: list[str], project_id: str, limit: 
         return []
 
 
+async def get_episodes_in_range(
+    start_iso: str, end_iso: str, project_id: str | None = None, limit: int = 6
+) -> list[dict]:
+    """Episodes recorded inside a datetime window (ISO strings compare
+    lexicographically), newest first. project_id=None spans all projects
+    (voice commands). Returns [] on any failure — time-window recall is an
+    enhancement, never a blocker."""
+    scope = "AND e.project_id = $project_id" if project_id else ""
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                f"""
+                MATCH (e:Episode)
+                WHERE e.timestamp >= $start AND e.timestamp < $end {scope}
+                RETURN e.id AS id, e.prompt AS prompt, e.response AS response,
+                       e.timestamp AS timestamp
+                ORDER BY e.timestamp DESC
+                LIMIT $limit
+                """,
+                start=start_iso,
+                end=end_iso,
+                project_id=project_id,
+                limit=limit,
+            )
+            return await result.data()
+    except Exception as e:
+        logger.warning(f"get_episodes_in_range failed: {e}")
+        return []
+
+
 async def get_episodes_by_ids(episode_ids: list[str]) -> list[dict]:
     """Lean lookup for provenance citations (M14) — just enough to label a
     source, never full prompt/response text.

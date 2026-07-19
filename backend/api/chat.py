@@ -6,7 +6,8 @@ from models.schemas import (
     Conversation, Message, RoutingLog, Project,
 )
 from database.sqlite import get_db
-from services.memory_service import store_memory, search_memory
+from services.memory_service import store_memory, bump_recall_counts
+from services.recall_service import recall, format_time_block
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
     store_fact, get_pinned_facts, get_episodes_by_ids,
@@ -175,11 +176,18 @@ async def send_message(
         background_tasks.add_task(store_fact, fact_id, new_fact_text, user_text)
         logger.info(f"Pinning new fact: {new_fact_text[:80]}")
 
-    # ── Retrieve relevant memories (ChromaDB) + reinforce in Neo4j ────────────
-    memories = search_memory(user_text, convo.project_id, n_results=3)
+    # ── Layer-3 recall: cues from the whole moment + time-window lookups ──────
+    recall_result = await recall(
+        user_text,
+        convo.project_id,
+        history_texts=[m.content for m in history],
+        n_results=3,
+    )
+    memories = recall_result["memories"]
     recalled_ids = [m["id"] for m in memories if m.get("id")]
     if recalled_ids:
         background_tasks.add_task(reinforce, recalled_ids)
+        background_tasks.add_task(bump_recall_counts, recalled_ids)
 
     memory_context = ""
     if memories:
@@ -194,6 +202,11 @@ async def send_message(
             "about past conversations:\n" + "\n".join(lines)
         )
 
+    if recall_result["time_label"]:
+        memory_context += format_time_block(
+            recall_result["time_label"], recall_result["time_episodes"]
+        )
+
     # ── Inject pinned facts (always present in every turn) ─────────────────────
     pinned_facts = await get_pinned_facts()
     if pinned_facts:
@@ -203,8 +216,20 @@ async def send_message(
     # ── Build lean provenance for this reply (M14) — surfaces what was already
     # retrieved above, no new retrieval, no full prompt/response text ─────────
     sources: list[dict] = []
+    # Date-window episodes are exact records — cite them like recalled ones.
+    for e in recall_result["time_episodes"]:
+        prompt = e.get("prompt") or ""
+        sources.append({
+            "type": "episode",
+            "ref_id": e["id"],
+            "label": prompt[:80] + ("…" if len(prompt) > 80 else ""),
+            "timestamp": e.get("timestamp"),
+        })
+    time_episode_ids = {e["id"] for e in recall_result["time_episodes"]}
     if recalled_ids:
-        episodes = await get_episodes_by_ids(recalled_ids)
+        episodes = await get_episodes_by_ids(
+            [i for i in recalled_ids if i not in time_episode_ids]
+        )
         episode_ids = {e["id"] for e in episodes}
         for e in episodes:
             prompt = e.get("prompt") or ""
