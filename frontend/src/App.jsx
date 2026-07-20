@@ -185,6 +185,17 @@ export default function App() {
     setGreeting(nextGreeting());
   };
 
+  // The generic "New Chat" entry points (sidebar button, ⌘N, the Chats
+  // section's own "+") always start unfiled — never scoped to whatever
+  // project happens to be active. Only a project's own "new chat in
+  // project" button (or explicitly picking a project) should file a new
+  // chat under a project. This also self-heals any stale active-project
+  // state simply by being used, with no separate "reset" step needed.
+  const handleNewChatUnfiled = () => {
+    setActiveProjectId(null);
+    handleNewChat();
+  };
+
   // Core send. overrideSel ({provider, model} | null) is a one-shot explicit
   // pick — used by the retry menu; a normal manual-mode send uses the
   // standing manualModel pick instead.
@@ -336,7 +347,7 @@ export default function App() {
       title: "Chats",
       items: conversations.filter((c) => !c.pinned).map(toChatItem),
       emptyLabel: "No recent chats",
-      actions: [{ icon: Plus, label: "New chat", onClick: handleNewChat }],
+      actions: [{ icon: Plus, label: "New chat", onClick: handleNewChatUnfiled }],
     },
   ];
 
@@ -354,7 +365,7 @@ export default function App() {
         case "n":
           e.preventDefault();
           setView("chat");
-          handleNewChat();
+          handleNewChatUnfiled();
           break;
         case "g":
           e.preventDefault();
@@ -376,7 +387,7 @@ export default function App() {
   // Search doesn't exist yet — the item is a placeholder for future
   // functionality. Graph/Memory moved here from the app header.
   const sidebarNavItems = [
-    { id: "new-chat", label: "New Chat", icon: SquarePen, shortcut: "⌘N", onClick: () => { setView("chat"); handleNewChat(); } },
+    { id: "new-chat", label: "New Chat", icon: SquarePen, shortcut: "⌘N", onClick: () => { setView("chat"); handleNewChatUnfiled(); } },
     { id: "search", label: "Search Chats", icon: Search, shortcut: "⌘K", onClick: () => {} },
     {
       id: "graph",
