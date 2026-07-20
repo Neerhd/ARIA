@@ -42,9 +42,15 @@ export async function sendMessage(
   overrideProvider = null,
   overrideModel = null,
   projectId = null,
+  image = null, // { data, mime } — base64, from an uploadFile() is_image response
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
+  if (image) {
+    body.image_data = image.data;
+    body.image_mime = image.mime;
+    if (fileName) body.file_name = fileName;
+  }
   if (routingMode) body.routing_mode = routingMode;
   if (overrideProvider && overrideModel) {
     body.override_provider = overrideProvider;

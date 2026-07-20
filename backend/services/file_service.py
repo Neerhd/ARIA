@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 
 # File types we can read as plain text
@@ -9,8 +10,38 @@ TEXT_EXTENSIONS = {
     ".c", ".cpp", ".h", ".rs", ".swift", ".kt",
 }
 
+# Formats supported across Claude/GPT/Gemini vision — the common subset,
+# not each provider's full list, so a picked image works on any vision
+# provider without needing a client-side capability check.
+IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
 MAX_FILE_BYTES = 20 * 1024 * 1024   # 20 MB hard limit
+MAX_IMAGE_BYTES = 8 * 1024 * 1024   # 8 MB — vision APIs are stricter than raw file storage
 MAX_INJECT_CHARS = 16_000            # chars sent to the model (~4k tokens)
+
+
+def is_image(filename: str) -> bool:
+    return Path(filename).suffix.lower() in IMAGE_MIME_TYPES
+
+
+def read_image(filename: str, content: bytes) -> tuple[str, str]:
+    """Return (base64_data, mime_type) for an image attachment.
+    Raises ValueError if too large or an unrecognised image extension."""
+    if len(content) > MAX_IMAGE_BYTES:
+        raise ValueError(
+            f"Image exceeds the {MAX_IMAGE_BYTES // (1024 * 1024)} MB limit — try a smaller one."
+        )
+    ext = Path(filename).suffix.lower()
+    mime = IMAGE_MIME_TYPES.get(ext)
+    if not mime:
+        raise ValueError(f"Unsupported image type '{ext}'. Supported: PNG, JPEG, GIF, WebP.")
+    return base64.b64encode(content).decode("ascii"), mime
 
 
 def extract_text(filename: str, content: bytes) -> tuple[str, bool]:

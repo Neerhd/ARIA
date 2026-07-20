@@ -15,7 +15,7 @@ from services.graph_service import (
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
 from services.fact_service import extract_and_store_facts, build_profile_context
-from services.router_service import default_provider, default_model, is_configured, PROVIDERS
+from services.router_service import default_provider, default_model, is_configured, supports_vision, PROVIDERS
 from services.role_service import resolve_role
 from services.role_classifier_service import classify_role
 from services.tool_service import run_agentic_loop, build_tool_instruction, ALL_TOOLS
@@ -166,9 +166,24 @@ async def send_message(
         provider = default_provider()
         model = default_model(provider)
     else:
-        role = await classify_role(user_text, bool(req.file_content))
+        role = await classify_role(user_text, bool(req.file_content or req.image_data))
         provider, model = resolve_role(role)
         logger.info(f"Routing: role={role or 'unclassified'} → {provider}:{model}")
+
+    # An image attached to a provider that can't see it would otherwise be
+    # silently dropped — surface it instead, matching the router's
+    # never-fail-silently policy for provider/model mismatches.
+    if req.image_data and not supports_vision(provider):
+        vision_providers = ", ".join(
+            p.label for p in PROVIDERS.values() if p.supports_vision and is_configured(p.id)
+        )
+        raise HTTPException(
+            400,
+            f"{PROVIDERS[provider].label} can't process images. "
+            + (f"Switch to Manual mode and pick one of: {vision_providers}."
+               if vision_providers else
+               "None of your configured providers support vision yet — add a key for Anthropic, OpenAI, or Google.")
+        )
 
     # ── Detect "remember" intent and queue fact storage ────────────────────────
     new_fact_text = _extract_fact(user_text)
@@ -269,6 +284,15 @@ async def send_message(
     else:
         user_turn = user_text
 
+    # An image turns user_turn into content blocks (universal format —
+    # router_service translates it to each provider's exact wire shape).
+    # Plain-string content stays the common, unchanged path.
+    if req.image_data and req.image_mime:
+        user_turn = [
+            {"type": "image", "media_type": req.image_mime, "data": req.image_data},
+            {"type": "text", "text": user_turn},
+        ]
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT + tool_instruction + memory_context}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
@@ -284,6 +308,8 @@ async def send_message(
     stored_user_content = user_text
     if req.file_name:
         stored_user_content += f"\n[Attached: {req.file_name}]"
+    if req.image_data:
+        stored_user_content += f"\n[Image attached: {req.file_name or 'image'}]"
 
     episode_id = str(uuid.uuid4())
 

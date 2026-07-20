@@ -42,6 +42,7 @@ class Provider:
     key_setting: str         # attribute on settings holding this provider's API key
     models: tuple            # ((model_id, human label), ...) — strong model first, budget model second
     supports_tools: bool = True
+    supports_vision: bool = False
     key_url: str = ""        # where the user creates an API key
 
     @property
@@ -59,6 +60,7 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         base_url="https://api.anthropic.com/v1",
         key_setting="anthropic_api_key",
         models=(("claude-sonnet-5", "Claude Sonnet"), ("claude-haiku-4-5", "Claude Haiku")),
+        supports_vision=True,
         key_url="https://console.anthropic.com",
     ),
     Provider(
@@ -66,6 +68,7 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         base_url="https://api.openai.com/v1",
         key_setting="openai_api_key",
         models=(("gpt-5.1", "GPT-5.1"), ("gpt-5-mini", "GPT-5 mini")),
+        supports_vision=True,
         key_url="https://platform.openai.com",
     ),
     Provider(
@@ -73,6 +76,7 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         base_url="https://generativelanguage.googleapis.com/v1beta/openai",
         key_setting="google_api_key",
         models=(("gemini-2.5-pro", "Gemini Pro"), ("gemini-2.5-flash", "Gemini Flash")),
+        supports_vision=True,
         key_url="https://aistudio.google.com",
     ),
     Provider(
@@ -80,6 +84,9 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         base_url="https://api.x.ai/v1",
         key_setting="xai_api_key",
         models=(("grok-4", "Grok 4"), ("grok-4-fast", "Grok Fast")),
+        # Not confirmed against xAI's current API — left conservative
+        # (text-only) rather than asserting vision support unverified.
+        supports_vision=False,
         key_url="https://console.x.ai",
     ),
     Provider(
@@ -88,6 +95,7 @@ PROVIDERS: dict[str, Provider] = {p.id: p for p in [
         key_setting="perplexity_api_key",
         models=(("sonar-pro", "Sonar Pro"), ("sonar", "Sonar")),
         supports_tools=False,  # sonar models don't do function calling
+        supports_vision=False,  # not confirmed — left conservative, see xai note above
         key_url="https://www.perplexity.ai/settings/api",
     ),
 ]}
@@ -130,6 +138,10 @@ def supports_tools(provider_id: str) -> bool:
     return PROVIDERS[provider_id].supports_tools
 
 
+def supports_vision(provider_id: str) -> bool:
+    return PROVIDERS[provider_id].supports_vision
+
+
 def is_anthropic(provider_id: str) -> bool:
     return PROVIDERS[provider_id].api == "anthropic"
 
@@ -142,6 +154,7 @@ async def send(
 ) -> str:
     """Send a chat request and return the assistant's text reply."""
     provider = _require_configured(provider_id)
+    messages = _prepare_messages(messages, provider.api)
     if provider.api == "anthropic":
         text, usage = await _call_anthropic(provider, model, messages, max_tokens)
     else:
@@ -157,6 +170,7 @@ async def send_with_tools(
     """Send a chat request with tool definitions. Returns (reply, tool_calls),
     tool_calls normalised to {id, function: {name, arguments: dict}}."""
     provider = _require_configured(provider_id)
+    messages = _prepare_messages(messages, provider.api)
     if provider.api == "anthropic":
         reply, tool_calls, usage = await _call_anthropic_with_tools(provider, model, messages, tools, max_tokens)
     else:
@@ -202,6 +216,34 @@ def _extract_system(messages: list[dict]) -> tuple[str, list[dict]]:
         else:
             rest.append(msg)
     return system, rest
+
+
+def _prepare_messages(messages: list[dict], api: str) -> list[dict]:
+    """Translate the universal message format into a provider's exact wire
+    shape. A message's content is either a plain string (the common case,
+    untouched here) or a list of blocks — currently only produced when an
+    image is attached: [{"type": "text", "text": ...},
+    {"type": "image", "media_type": ..., "data": <base64>}]."""
+    out = []
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            out.append(msg)
+            continue
+        if api == "anthropic":
+            blocks = [
+                {"type": "image", "source": {"type": "base64", "media_type": b["media_type"], "data": b["data"]}}
+                if b.get("type") == "image" else b
+                for b in content
+            ]
+        else:
+            blocks = [
+                {"type": "image_url", "image_url": {"url": f"data:{b['media_type']};base64,{b['data']}"}}
+                if b.get("type") == "image" else b
+                for b in content
+            ]
+        out.append({**msg, "content": blocks})
+    return out
 
 
 def _convert_tools_to_anthropic(tools: list[dict]) -> list[dict]:

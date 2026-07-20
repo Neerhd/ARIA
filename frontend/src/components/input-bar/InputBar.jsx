@@ -5,7 +5,8 @@ import Button from "../button/Button";
 import Tooltip from "../tooltip/Tooltip";
 import { useScrollThumb } from "../../hooks/useScrollThumb";
 
-const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt";
+const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt,.png,.jpg,.jpeg,.gif,.webp";
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 
 /**
  * The message composer — a single self-contained field (bg-background,
@@ -17,6 +18,7 @@ const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yam
 export default function InputBar({ onSend, disabled, routingMode, manualModel, onManualModelChange, modelOptions = [], isFollowUp = false, prefillText, prefillKey }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
   const [isMultiline, setIsMultiline] = useState(false);
   const fileRef = useRef(null);
   const textareaRef = useRef(null);
@@ -73,6 +75,10 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
     onSend(text, file);
     setText("");
     setFile(null);
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -82,17 +88,36 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
 
   const handleFileChange = (e) => {
     const picked = e.target.files?.[0];
-    if (picked) setFile(picked);
+    if (!picked) return;
+    setFile(picked);
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return IMAGE_EXT_RE.test(picked.name) ? URL.createObjectURL(picked) : null;
+    });
   };
 
   const removeFile = () => {
     setFile(null);
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  // Revoke the object URL on unmount so a picked-but-unsent image doesn't
+  // leak — the removeFile()/handleSubmit() paths already clean up in time.
+  useEffect(() => () => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const canSend = !disabled && (text.trim() || file);
+  const isImageFile = file && IMAGE_EXT_RE.test(file.name);
   const placeholder = file
-    ? "Add a question about the file, or send as-is…"
+    ? isImageFile
+      ? "Add a question about the image, or send as-is…"
+      : "Add a question about the file, or send as-is…"
     : isFollowUp
       ? "Ask follow up"
       : "Ask anything";
@@ -103,7 +128,15 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
       {file && (
         <div className="flex items-center gap-2 pb-2">
           <div className="font-sidebar inline-flex items-center gap-1.5 rounded-button border border-button-primary px-2.5 py-1 text-xs font-medium text-button-primary">
-            <Paperclip className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            {isImageFile ? (
+              <img
+                src={imagePreviewUrl}
+                alt=""
+                className="size-4 shrink-0 rounded-sm object-cover"
+              />
+            ) : (
+              <Paperclip className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            )}
             <span className="max-w-[200px] truncate">{file.name}</span>
             <button
               type="button"

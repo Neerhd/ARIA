@@ -48,6 +48,8 @@ class ChatRequest(BaseModel):
     project_id: Optional[str] = None     # falls back to the Default project when omitted
     file_content: Optional[str] = None
     file_name: Optional[str] = None
+    image_data: Optional[str] = None     # base64, from /files/upload's is_image response
+    image_mime: Optional[str] = None
     routing_mode: Optional[str] = None       # "auto" | "manual" ("ask" accepted but treated as auto)
     override_provider: Optional[str] = None  # manual pick: provider id (with override_model, bypasses classification)
     override_model: Optional[str] = None     # manual pick: exact model id on that provider

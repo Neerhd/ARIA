@@ -183,7 +183,7 @@ export default function App() {
   // Core send. overrideSel ({provider, model} | null) is a one-shot explicit
   // pick — used by the retry menu; a normal manual-mode send uses the
   // standing manualModel pick instead.
-  const _doSend = async (text, fileContent, fileName, truncated, overrideSel, existingConvoId) => {
+  const _doSend = async (text, fileContent, fileName, truncated, overrideSel, existingConvoId, image) => {
     const targetConvoId = existingConvoId ?? conversationId;
     const displayText = text.trim() || (fileName ? "Please read and summarise this file for me." : "");
     const optimisticId = `tmp-${Date.now()}`;
@@ -208,7 +208,7 @@ export default function App() {
       const sel = overrideSel ?? (routingMode === "manual" ? manualModel : null);
       const reqMode = overrideSel ? "manual" : routingMode;
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, sel?.provider, sel?.model, activeProjectId);
+      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, sel?.provider, sel?.model, activeProjectId, image);
 
       if (!conversationId) setConversationId(data.conversation_id);
 
@@ -236,19 +236,23 @@ export default function App() {
   };
 
   const handleSend = async (text, file) => {
-    let fileContent = null, fileName = null, truncated = false;
+    let fileContent = null, fileName = null, truncated = false, image = null;
     if (file) {
       try {
         const uploaded = await uploadFile(file);
-        fileContent = uploaded.text;
         fileName = uploaded.filename;
-        truncated = uploaded.truncated;
+        if (uploaded.is_image) {
+          image = { data: uploaded.data, mime: uploaded.mime_type };
+        } else {
+          fileContent = uploaded.text;
+          truncated = uploaded.truncated;
+        }
       } catch (err) {
         setError(`File upload failed: ${err.message}`);
         return;
       }
     }
-    await _doSend(text, fileContent, fileName, truncated, null, null);
+    await _doSend(text, fileContent, fileName, truncated, null, null, image);
   };
 
   // Retry re-sends the user text behind a message — for a user bubble that's
