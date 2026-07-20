@@ -76,11 +76,11 @@ export default function App() {
     }
   };
 
+  // Opening a past chat to read it is a read-only action — it must never
+  // silently change which project new chats get filed into. Only explicit
+  // choices (ProjectSwitcher, a project's own "+ new chat" button) do that.
   const handleSelectChat = (convo) => {
     setView("chat");
-    if (convo.project_id && convo.project_id !== activeProjectId) {
-      setActiveProjectId(convo.project_id);
-    }
     loadConversation(convo.id);
   };
 
@@ -88,10 +88,14 @@ export default function App() {
     const list = await fetchProjects();
     setProjects(list);
     refreshConversations(); // project CRUD can add/remove conversations too
-    const stillValid = activeProjectId && list.some((p) => p.id === activeProjectId);
+    // No active project is a valid, common state — not something to
+    // "recover" from. Only a stored id that no longer exists (its project
+    // was deleted) needs resetting, and it resets to Default (null), never
+    // to an arbitrary other project.
+    const stillValid = !activeProjectId || list.some((p) => p.id === activeProjectId);
     if (!stillValid) {
-      setActiveProjectId(list[0]?.id ?? null);
-      if (activeProjectId) handleNewChat(); // active project was deleted out from under us
+      setActiveProjectId(null);
+      handleNewChat(); // active project was deleted out from under us
     }
   };
 
@@ -101,6 +105,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeProjectId) localStorage.setItem("aria-active-project", activeProjectId);
+    else localStorage.removeItem("aria-active-project");
   }, [activeProjectId]);
 
   const handleProjectSelect = (id) => {
