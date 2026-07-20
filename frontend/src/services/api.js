@@ -33,6 +33,17 @@ async function requestOr(path, fallback) {
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────
 
+// The backend streams the reply as NDJSON — one JSON object per line:
+//   {"type": "meta", conversation_id, message_id, model, provider, role, sources}
+//   {"type": "text_delta", text}          — append to the growing reply
+//   {"type": "round_reset"}                — a tool call was made; the text
+//                                             streamed so far this round was
+//                                             preamble chatter, never part of
+//                                             the real reply — discard it
+//   {"type": "done", tools_used}
+//   {"type": "error", detail}              — surfaced as a thrown Error, same
+//                                             as any other failed request
+// onEvent is called once per parsed line, in arrival order.
 export async function sendMessage(
   message,
   conversationId = null,
@@ -43,6 +54,7 @@ export async function sendMessage(
   overrideModel = null,
   projectId = null,
   image = null, // { data, mime } — base64, from an uploadFile() is_image response
+  onEvent = () => {},
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
@@ -57,7 +69,38 @@ export async function sendMessage(
     body.override_model = overrideModel;
   }
   if (projectId) body.project_id = projectId;
-  return request("/chat", { method: "POST", body });
+
+  const res = await fetch(`${BASE}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Server error ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "error") throw new Error(event.detail || "The model call failed.");
+        onEvent(event);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export async function uploadFile(file) {

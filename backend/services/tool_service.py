@@ -561,3 +561,77 @@ async def run_agentic_loop(
         provider, model, current_messages, [], purpose="chat", role=role
     )
     return reply, tool_names_used
+
+
+async def run_agentic_loop_stream(
+    provider: str,
+    model: str,
+    messages: list[dict],
+    tools_enabled: list[str],
+    project_id: str | None = None,
+    role: str | None = None,
+):
+    """Streaming counterpart to run_agentic_loop. Same semantics, same tool
+    round-trip logic — only the delivery mechanism changes. Yields:
+      {"type": "text_delta", "text": ...}  — live text for the round currently streaming
+      {"type": "round_reset"}               — that round turned out to call a tool, so its
+                                               text was preamble chatter, never part of the
+                                               reply (run_agentic_loop discards this exact
+                                               text too — it only ever returns the final,
+                                               tool-free round's text). A fresh round follows.
+      {"type": "done", "reply": ..., "tools_used": [...]}  — final event, reply is byte-for-
+                                               byte what run_agentic_loop would have returned.
+    """
+    from services import router_service
+
+    role = role or ""
+    use_tools = bool(tools_enabled) and router_service.supports_tools(provider)
+    tool_defs = build_tool_definitions(tools_enabled) if use_tools else []
+    tool_names_used: list[str] = []
+    current_messages = list(messages)
+    is_anth = router_service.is_anthropic(provider)
+
+    rounds = _MAX_TOOL_ROUNDS if use_tools else 1
+    for _round in range(rounds):
+        reply = ""
+        tool_calls: list[dict] = []
+        async for event in router_service.stream_with_tools(
+            provider, model, current_messages, tool_defs, purpose="chat", role=role
+        ):
+            if event["type"] == "text_delta":
+                yield event
+            else:
+                reply, tool_calls = event["reply"], event["tool_calls"]
+
+        if not tool_calls:
+            yield {"type": "done", "reply": reply, "tools_used": tool_names_used}
+            return
+
+        yield {"type": "round_reset"}
+
+        current_messages.append(_build_assistant_tool_msg(reply, tool_calls, is_anth))
+
+        calls_and_results: list[tuple] = []
+        for call in tool_calls:
+            fn = call.get("function", {})
+            name = fn.get("name", "")
+            args = _parse_args(fn.get("arguments", {}))
+            logger.info(f"Tool call: {name}({list(args.keys())})")
+            tool_names_used.append(name)
+            result = await execute_tool(name, args, project_id)
+            logger.info(f"Tool result [{name}]: {result[:120]}")
+            calls_and_results.append((call, result))
+
+        current_messages.extend(_build_tool_results_msg(calls_and_results, is_anth))
+
+    # Round budget exhausted — same fallback run_agentic_loop uses: one final
+    # call with no tools attached, forcing a plain-text answer.
+    reply = ""
+    async for event in router_service.stream_with_tools(
+        provider, model, current_messages, [], purpose="chat", role=role
+    ):
+        if event["type"] == "text_delta":
+            yield event
+        else:
+            reply = event["reply"]
+    yield {"type": "done", "reply": reply, "tools_used": tool_names_used}

@@ -217,6 +217,11 @@ export default function App() {
     setLoading(true);
     setError(null);
 
+    // Set once the "meta" event names the real assistant message id — until
+    // then there's no placeholder bubble to remove on failure.
+    let assistantId = null;
+    let streamedText = "";
+
     try {
       // A one-shot pick (retry menu) forces manual for that single message;
       // otherwise manual mode sends the standing pick (when one is set) and
@@ -224,28 +229,52 @@ export default function App() {
       const sel = overrideSel ?? (routingMode === "manual" ? manualModel : null);
       const reqMode = overrideSel ? "manual" : routingMode;
 
-      const data = await sendMessage(text, targetConvoId, fileContent, fileName, reqMode, sel?.provider, sel?.model, activeProjectId, image);
-
-      if (!conversationId) setConversationId(data.conversation_id);
-
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== optimisticId),
-        { ...optimistic, id: `user-${data.message_id}` },
-        {
-          id: data.message_id,
-          role: "assistant",
-          content: data.reply,
-          model: data.model,
-          provider: data.provider,
-          task_role: data.role,
-          tools_used: data.tools_used || [],
-          sources: data.sources || [],
-          conversation_id: data.conversation_id,
-        },
-      ]);
+      await sendMessage(
+        text, targetConvoId, fileContent, fileName, reqMode, sel?.provider, sel?.model, activeProjectId, image,
+        (event) => {
+          if (event.type === "meta") {
+            if (!conversationId) setConversationId(event.conversation_id);
+            assistantId = event.message_id;
+            // The first byte of the stream — swap the "ARIA is thinking…"
+            // indicator for the real (still-empty) bubble now, so the two
+            // never show at once.
+            setLoading(false);
+            setMessages((prev) => [
+              ...prev.filter((m) => m.id !== optimisticId),
+              { ...optimistic, id: `user-${event.message_id}` },
+              {
+                id: assistantId,
+                role: "assistant",
+                content: "",
+                model: event.model,
+                provider: event.provider,
+                task_role: event.role,
+                tools_used: [],
+                sources: event.sources || [],
+                conversation_id: event.conversation_id,
+                streaming: true,
+              },
+            ]);
+          } else if (event.type === "text_delta") {
+            streamedText += event.text;
+            const chunk = streamedText;
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: chunk } : m)));
+          } else if (event.type === "round_reset") {
+            // That round called a tool — its text was preamble, never the
+            // real reply (run_agentic_loop discards it too). A fresh round
+            // of text_delta events follows.
+            streamedText = "";
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: "" } : m)));
+          } else if (event.type === "done") {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, tools_used: event.tools_used || [], streaming: false } : m))
+            );
+          }
+        }
+      );
     } catch (err) {
       setError(err.message);
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId && m.id !== assistantId));
     } finally {
       setLoading(false);
     }

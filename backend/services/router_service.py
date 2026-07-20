@@ -179,6 +179,30 @@ async def send_with_tools(
     return reply, tool_calls
 
 
+async def stream_with_tools(
+    provider_id: str, model: str, messages: list[dict], tools: list[dict],
+    max_tokens: int = 4096, purpose: str = "other", role: str = "",
+):
+    """Streaming counterpart to send_with_tools. An async generator yielding
+    {"type": "text_delta", "text": ...} events as the reply arrives, followed
+    by exactly one {"type": "done", "reply": full_text, "tool_calls": [...]}.
+    Usage is recorded the same way as the non-streaming path, once the
+    stream completes."""
+    provider = _require_configured(provider_id)
+    prepared = _prepare_messages(messages, provider.api)
+    if provider.api == "anthropic":
+        gen = _stream_anthropic_with_tools(provider, model, prepared, tools, max_tokens)
+    else:
+        gen = _stream_openai_compat_with_tools(provider, model, prepared, tools)
+
+    async for event in gen:
+        if event["type"] == "done":
+            await _record_usage(provider_id, model, event.get("usage"), purpose, role)
+            yield {"type": "done", "reply": event["reply"], "tool_calls": event["tool_calls"]}
+        else:
+            yield event
+
+
 async def _record_usage(
     provider_id: str, model: str, usage: dict | None, purpose: str, role: str
 ) -> None:
@@ -259,6 +283,20 @@ def _convert_tools_to_anthropic(tools: list[dict]) -> list[dict]:
     return result
 
 
+async def _iter_sse_data(response: httpx.Response):
+    """Yield parsed JSON payloads from an SSE response's `data:` lines.
+    Both Anthropic and OpenAI-compatible streams embed their event type
+    inside the JSON payload itself, so a single generic line parser covers
+    both — no need to also parse SSE `event:` lines."""
+    async for line in response.aiter_lines():
+        if not line or not line.startswith("data:"):
+            continue
+        data = line[len("data:"):].strip()
+        if not data or data == "[DONE]":
+            continue
+        yield json.loads(data)
+
+
 def _provider_error(provider: Provider, status: int, body: str) -> HTTPException:
     logger.error("%s API error %s: %s", provider.label, status, body[:400])
     if status == 429:
@@ -334,6 +372,65 @@ async def _call_anthropic_with_tools(
     return reply, tool_calls, data.get("usage") or {}
 
 
+async def _stream_anthropic_with_tools(
+    provider: Provider, model: str, messages: list[dict], tools: list[dict],
+    max_tokens: int,
+):
+    """Parse Anthropic's SSE stream, tracking content blocks by index —
+    text blocks accumulate text_delta fragments, tool_use blocks accumulate
+    input_json_delta fragments that only parse to JSON once the block closes."""
+    system, msgs = _extract_system(messages)
+    payload: dict = {"model": model, "max_tokens": max_tokens, "messages": msgs, "stream": True}
+    if system:
+        payload["system"] = system
+    if tools:
+        payload["tools"] = _convert_tools_to_anthropic(tools)
+
+    blocks: dict[int, dict] = {}
+    usage: dict = {}
+
+    async with _http().stream(
+        "POST", f"{provider.base_url}/messages",
+        headers=_anthropic_headers(provider), json=payload,
+    ) as r:
+        if not r.is_success:
+            body = await r.aread()
+            raise _provider_error(provider, r.status_code, body.decode(errors="replace"))
+        async for event in _iter_sse_data(r):
+            etype = event.get("type")
+            if etype == "message_start":
+                usage.update(event.get("message", {}).get("usage") or {})
+            elif etype == "content_block_start":
+                idx = event["index"]
+                cb = event["content_block"]
+                if cb["type"] == "tool_use":
+                    blocks[idx] = {"type": "tool_use", "id": cb["id"], "name": cb["name"], "json": ""}
+                else:
+                    blocks[idx] = {"type": "text", "text": ""}
+            elif etype == "content_block_delta":
+                idx = event["index"]
+                delta = event["delta"]
+                if delta.get("type") == "text_delta":
+                    blocks[idx]["text"] += delta["text"]
+                    yield {"type": "text_delta", "text": delta["text"]}
+                elif delta.get("type") == "input_json_delta":
+                    blocks[idx]["json"] += delta.get("partial_json", "")
+            elif etype == "message_delta":
+                usage.update(event.get("usage") or {})
+
+    reply = "\n".join(blocks[i]["text"] for i in sorted(blocks) if blocks[i]["type"] == "text")
+    tool_calls = []
+    for i in sorted(blocks):
+        b = blocks[i]
+        if b["type"] == "tool_use":
+            try:
+                args = json.loads(b["json"]) if b["json"] else {}
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append({"id": b["id"], "function": {"name": b["name"], "arguments": args}})
+    yield {"type": "done", "reply": reply, "tool_calls": tool_calls, "usage": usage}
+
+
 # ─── OpenAI-compatible (OpenAI / Google / xAI / Perplexity) ───────────────────
 
 def _openai_headers(provider: Provider) -> dict:
@@ -382,3 +479,62 @@ async def _call_openai_compat_with_tools(
         args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
         tool_calls.append({"id": tc.get("id", ""), "function": {"name": fn.get("name", ""), "arguments": args}})
     return content, tool_calls, data.get("usage") or {}
+
+
+async def _stream_openai_compat_with_tools(
+    provider: Provider, model: str, messages: list[dict], tools: list[dict]
+):
+    """Parse an OpenAI-compatible SSE stream. Tool-call fragments are keyed
+    by their array index (id/name arrive once, arguments arrive in pieces
+    across many chunks) — accumulate per index, then parse each complete
+    arguments string once the stream ends. stream_options.include_usage
+    asks for a final usage-only chunk (empty choices, populated usage)."""
+    payload: dict = {
+        "model": model, "messages": messages, "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+
+    content = ""
+    tool_calls: dict[int, dict] = {}
+    usage: dict = {}
+
+    async with _http().stream(
+        "POST", f"{provider.base_url}/chat/completions",
+        headers=_openai_headers(provider), json=payload,
+    ) as r:
+        if not r.is_success:
+            body = await r.aread()
+            raise _provider_error(provider, r.status_code, body.decode(errors="replace"))
+        async for event in _iter_sse_data(r):
+            if event.get("usage"):
+                usage.update(event["usage"])
+            choices = event.get("choices") or []
+            if not choices:
+                continue
+            delta = choices[0].get("delta") or {}
+            if delta.get("content"):
+                content += delta["content"]
+                yield {"type": "text_delta", "text": delta["content"]}
+            for tc in delta.get("tool_calls") or []:
+                idx = tc.get("index", 0)
+                slot = tool_calls.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                if tc.get("id"):
+                    slot["id"] = tc["id"]
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    slot["name"] += fn["name"]
+                if fn.get("arguments"):
+                    slot["arguments"] += fn["arguments"]
+
+    parsed_calls = []
+    for i in sorted(tool_calls):
+        tc = tool_calls[i]
+        try:
+            args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+        except json.JSONDecodeError:
+            args = {}
+        parsed_calls.append({"id": tc["id"], "function": {"name": tc["name"], "arguments": args}})
+    yield {"type": "done", "reply": content, "tool_calls": parsed_calls, "usage": usage}

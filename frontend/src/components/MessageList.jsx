@@ -109,7 +109,13 @@ export default function MessageList({ messages, loading, onJumpToMemory, onRetry
                     {m.truncated && <span className="text-amber-400"> (truncated)</span>}
                   </div>
                 )}
-                {isUser ? m.content : <Markdown>{m.content}</Markdown>}
+                {isUser ? (
+                  m.content
+                ) : m.streaming && !m.content ? (
+                  <span className="text-muted-foreground">ARIA is thinking…</span>
+                ) : (
+                  <Markdown>{m.content}</Markdown>
+                )}
                 <SourcesDisclosure sources={m.sources} onJumpToMemory={onJumpToMemory} />
               </Bubble>
             );

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.schemas import (
-    ChatRequest, ChatResponse, ConversationOut, ConversationUpdate, MessageOut,
+    ChatRequest, ConversationOut, ConversationUpdate, MessageOut,
     Conversation, Message, RoutingLog, Project,
 )
 from database.sqlite import get_db
@@ -18,7 +19,8 @@ from services.fact_service import extract_and_store_facts, build_profile_context
 from services.router_service import default_provider, default_model, is_configured, supports_vision, PROVIDERS
 from services.role_service import resolve_role
 from services.role_classifier_service import classify_role
-from services.tool_service import run_agentic_loop, build_tool_instruction, ALL_TOOLS
+from services.tool_service import run_agentic_loop_stream, build_tool_instruction, ALL_TOOLS
+import asyncio
 import uuid
 import json
 import re
@@ -90,7 +92,7 @@ async def _store_episode_memory(episode_id, conversation_id, prompt, response, p
 
 # ─── Chat endpoint ─────────────────────────────────────────────────────────────
 
-@router.post("", response_model=ChatResponse)
+@router.post("")
 async def send_message(
     req: ChatRequest,
     background_tasks: BackgroundTasks,
@@ -298,13 +300,6 @@ async def send_message(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
-    # ── Call the model — always via the agentic loop, since tools are always
-    #    available; the model itself decides whether to invoke one. ──────────
-    reply, tools_used = await run_agentic_loop(
-        provider, model, messages, tools_enabled, convo.project_id, role=role
-    )
-
-    # ── Persist to SQLite ──────────────────────────────────────────────────────
     stored_user_content = user_text
     if req.file_name:
         stored_user_content += f"\n[Attached: {req.file_name}]"
@@ -313,64 +308,96 @@ async def send_message(
 
     episode_id = str(uuid.uuid4())
 
-    user_msg = Message(
-        id=str(uuid.uuid4()),
-        conversation_id=convo.id,
-        role="user",
-        content=stored_user_content,
-    )
-    assistant_msg = Message(
-        id=episode_id,
-        conversation_id=convo.id,
-        role="assistant",
-        content=reply,
-    )
-    routing_log = RoutingLog(
-        id=str(uuid.uuid4()),
-        message_id=episode_id,
-        conversation_id=convo.id,
-        routing_mode=routing_mode,
-        role=role or "",
-        model_used=f"{provider}:{model}",
-        signals=json.dumps([]),
-    )
-    db.add(user_msg)
-    db.add(assistant_msg)
-    db.add(routing_log)
-    await db.commit()
+    # ── Stream the model's reply as NDJSON — one JSON object per line ─────────
+    # event types: meta (fires first, everything already known pre-model-call),
+    # text_delta (append to the growing reply), round_reset (the round just
+    # streamed turned out to call a tool — its text was never part of the
+    # reply, same as the non-streaming loop; drop what you've accumulated and
+    # keep going), done (terminal event), error (model call or persistence
+    # failed after the 200 was already sent — the only way to signal a
+    # failure once streaming has started).
+    async def event_stream():
+        def emit(obj: dict) -> str:
+            return json.dumps(obj) + "\n"
 
-    # ── Store in ChromaDB ──────────────────────────────────────────────────────
-    store_memory(
-        f"User: {stored_user_content}\nARIA: {reply}",
-        {"conversation_id": convo.id, "project_id": convo.project_id, "type": "exchange"},
-        entry_id=episode_id,
-    )
+        yield emit({
+            "type": "meta",
+            "conversation_id": convo.id,
+            "message_id": episode_id,
+            "model": model,
+            "provider": provider,
+            "role": role,
+            "sources": sources,
+        })
 
-    # ── Fire-and-forget: write Episode + Concepts to Neo4j ────────────────────
-    background_tasks.add_task(
-        _store_episode_memory,
-        episode_id,
-        convo.id,
-        stored_user_content,
-        reply,
-        convo.project_id,
-    )
+        reply = ""
+        tools_used: list[str] = []
+        try:
+            async for event in run_agentic_loop_stream(
+                provider, model, messages, tools_enabled, convo.project_id, role=role
+            ):
+                if event["type"] == "text_delta":
+                    reply += event["text"]
+                    yield emit({"type": "text_delta", "text": event["text"]})
+                elif event["type"] == "round_reset":
+                    reply = ""
+                    yield emit({"type": "round_reset"})
+                elif event["type"] == "done":
+                    reply = event["reply"]
+                    tools_used = event["tools_used"]
+        except HTTPException as e:
+            yield emit({"type": "error", "detail": e.detail})
+            return
+        except Exception as e:
+            logger.exception("Streaming chat failed mid-reply")
+            yield emit({"type": "error", "detail": str(e) or "The model call failed."})
+            return
 
-    # ── Layer 4 auto-capture — skipped when "remember this" already pinned
-    # the fact verbatim ────────────────────────────────────────────────────────
-    if not new_fact_text:
-        background_tasks.add_task(extract_and_store_facts, user_text, reply)
+        # ── Persist to SQLite ───────────────────────────────────────────────
+        user_msg = Message(
+            id=str(uuid.uuid4()), conversation_id=convo.id, role="user", content=stored_user_content,
+        )
+        assistant_msg = Message(
+            id=episode_id, conversation_id=convo.id, role="assistant", content=reply,
+        )
+        routing_log = RoutingLog(
+            id=str(uuid.uuid4()),
+            message_id=episode_id,
+            conversation_id=convo.id,
+            routing_mode=routing_mode,
+            role=role or "",
+            model_used=f"{provider}:{model}",
+            signals=json.dumps([]),
+        )
+        db.add(user_msg)
+        db.add(assistant_msg)
+        db.add(routing_log)
+        await db.commit()
 
-    return ChatResponse(
-        reply=reply,
-        conversation_id=convo.id,
-        message_id=episode_id,
-        model=model,
-        provider=provider,
-        role=role,
-        tools_used=tools_used,
-        sources=sources,
-    )
+        # ── Store in ChromaDB ────────────────────────────────────────────────
+        store_memory(
+            f"User: {stored_user_content}\nARIA: {reply}",
+            {"conversation_id": convo.id, "project_id": convo.project_id, "type": "exchange"},
+            entry_id=episode_id,
+        )
+
+        # ── Fire-and-forget jobs whose arguments (the full reply) are only
+        # known here, inside the generator. Using asyncio.create_task rather
+        # than background_tasks.add_task — the latter is only documented to
+        # work when scheduled before the response starts sending, and this
+        # runs after the 200 and the first NDJSON lines are already on the
+        # wire. The other background jobs above (reinforce, bump_recall_counts,
+        # store_fact) don't depend on the reply, so they were already queued
+        # via background_tasks.add_task earlier, before streaming began. ─────
+        asyncio.create_task(
+            _store_episode_memory(episode_id, convo.id, stored_user_content, reply, convo.project_id)
+        )
+        if not new_fact_text:
+            asyncio.create_task(extract_and_store_facts(user_text, reply))
+
+        yield emit({"type": "done", "tools_used": tools_used})
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 # ─── Conversation list / history ──────────────────────────────────────────────

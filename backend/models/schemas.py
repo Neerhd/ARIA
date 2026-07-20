@@ -62,17 +62,6 @@ class ChatRequest(BaseModel):
         return ""
 
 
-class ChatResponse(BaseModel):
-    reply: str
-    conversation_id: str
-    message_id: str
-    model: str
-    provider: Optional[str] = None
-    role: Optional[str] = None   # classified task role (None in manual mode / on classifier failure)
-    tools_used: list[str] = []
-    sources: list[dict] = []
-
-
 class ConversationOut(BaseModel):
     id: str
     project_id: str
