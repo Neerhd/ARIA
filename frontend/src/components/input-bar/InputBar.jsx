@@ -8,6 +8,10 @@ import { useScrollThumb } from "../../hooks/useScrollThumb";
 const ACCEPTED = ".txt,.md,.pdf,.py,.js,.ts,.jsx,.tsx,.json,.csv,.html,.xml,.yaml,.yml,.sh,.sql,.toml,.rb,.go,.java,.c,.cpp,.h,.rs,.swift,.kt,.png,.jpg,.jpeg,.gif,.webp";
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 
+// Clipboard image items report a MIME type, not a filename — map to the
+// extensions the backend's is_image() check recognises.
+const MIME_TO_EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+
 /**
  * The message composer — a single self-contained field (bg-background,
  * border reusing the secondary button's tone) shared by both the New Chat
@@ -18,6 +22,10 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 export default function InputBar({ onSend, disabled, routingMode, manualModel, onManualModelChange, modelOptions = [], isFollowUp = false, prefillText, prefillKey }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
+  // Bumped on every attach (picker or paste) so the chip below can key off
+  // it and replay its pop-in animation even when replacing one image with
+  // another directly — the visual confirmation a paste actually landed.
+  const [fileKey, setFileKey] = useState(0);
   const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
   const [isMultiline, setIsMultiline] = useState(false);
   const fileRef = useRef(null);
@@ -86,14 +94,35 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
     if (e.key === "Enter" && !e.shiftKey) handleSubmit(e);
   };
 
-  const handleFileChange = (e) => {
-    const picked = e.target.files?.[0];
-    if (!picked) return;
+  // Shared by the file picker and clipboard paste — replaces any current
+  // attachment, same single-attachment model either way.
+  const applyFile = (picked) => {
     setFile(picked);
+    setFileKey((k) => k + 1);
     setImagePreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return IMAGE_EXT_RE.test(picked.name) ? URL.createObjectURL(picked) : null;
     });
+  };
+
+  const handleFileChange = (e) => {
+    const picked = e.target.files?.[0];
+    if (picked) applyFile(picked);
+  };
+
+  // Only intercepts when the clipboard actually carries an image — plain
+  // text paste (the common case) is left completely alone.
+  const handlePaste = (e) => {
+    if (disabled) return;
+    for (const item of e.clipboardData?.items ?? []) {
+      const ext = item.kind === "file" ? MIME_TO_EXT[item.type] : null;
+      if (!ext) continue;
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      e.preventDefault();
+      applyFile(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: item.type }));
+      return;
+    }
   };
 
   const removeFile = () => {
@@ -127,7 +156,10 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
       {/* File attachment chip — only present once a file is actually picked */}
       {file && (
         <div className="flex items-center gap-2 pb-2">
-          <div className="font-sidebar inline-flex items-center gap-1.5 rounded-button border border-button-primary px-2.5 py-1 text-xs font-medium text-button-primary">
+          <div
+            key={fileKey}
+            className="font-sidebar animate-in fade-in-0 zoom-in-95 inline-flex items-center gap-1.5 rounded-button border border-button-primary px-2.5 py-1 text-xs font-medium text-button-primary duration-200"
+          >
             {isImageFile ? (
               <img
                 src={imagePreviewUrl}
@@ -218,6 +250,7 @@ export default function InputBar({ onSend, disabled, routingMode, manualModel, o
             onChange={(e) => setText(e.target.value)}
             onScroll={updateThumb}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
