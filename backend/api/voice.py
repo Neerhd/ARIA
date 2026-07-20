@@ -7,9 +7,10 @@ is agentic by nature and latency-sensitive — and uses the Agentic role's
 assigned model. Commands land in a rolling "Voice Commands" conversation in
 the Default project so they enter memory like normal chat.
 """
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from typing import Optional
+from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.sqlite import get_db
@@ -21,6 +22,7 @@ from services.project_service import get_or_create_default_project
 from services.role_service import resolve_role
 from services.router_service import default_provider
 from services.tool_service import run_agentic_loop, ALL_TOOLS
+from services.stt_service import transcribe_audio
 from api.chat import _store_episode_memory
 import uuid
 import logging
@@ -65,6 +67,19 @@ class VoiceCommandResponse(BaseModel):
     provider: str
     model: str
     tools_used: list[str] = []
+
+
+class TranscribeResponse(BaseModel):
+    text: str
+
+
+@router.post("/transcribe", response_model=TranscribeResponse)
+async def voice_transcribe(file: UploadFile = File(...)):
+    """Transcribe a short recording from the chat composer's mic button."""
+    content = await file.read()
+    suffix = Path(file.filename or "").suffix or ".webm"
+    text = await transcribe_audio(content, suffix=suffix)
+    return TranscribeResponse(text=text)
 
 
 async def _get_or_create_voice_conversation(db: AsyncSession) -> Conversation:

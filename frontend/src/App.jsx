@@ -463,6 +463,7 @@ export default function App() {
                   <InputBar
                     onSend={handleSend}
                     disabled={loading}
+                    onError={setError}
                     routingMode={routingMode}
                     manualModel={manualModel}
                     onManualModelChange={setManualModel}
@@ -493,6 +494,7 @@ export default function App() {
                   <InputBar
                     onSend={handleSend}
                     disabled={loading}
+                    onError={setError}
                     routingMode={routingMode}
                     manualModel={manualModel}
                     onManualModelChange={setManualModel}

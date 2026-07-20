@@ -138,6 +138,18 @@ export async function fetchRouterConfig() {
   return requestOr("/router/config", null);
 }
 
+export async function transcribeAudio(blob) {
+  const ext = blob.type.includes("mp4") ? "mp4" : blob.type.includes("ogg") ? "ogg" : "webm";
+  const formData = new FormData();
+  formData.append("file", blob, `dictation.${ext}`);
+  const res = await fetch(`${BASE}/voice/transcribe`, { method: "POST", body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Transcription failed ${res.status}`);
+  }
+  return res.json(); // { text }
+}
+
 export async function fetchUsage(days = 7) {
   return requestOr(`/router/usage?days=${days}`, null);
 }

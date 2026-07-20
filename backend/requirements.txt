@@ -29,3 +29,6 @@ python-multipart==0.0.20
 
 # macOS Calendar (read-only calendar tool)
 pyobjc-framework-EventKit==11.0
+
+# In-app dictation (mic button in the composer) — local Whisper transcription
+faster-whisper==1.2.1
