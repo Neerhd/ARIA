@@ -114,6 +114,22 @@ def format_memory_block(memories: list[dict], context_word: str = "message") -> 
     )
 
 
+def format_current_datetime_block() -> str:
+    """Ground truth for 'today'/'now'/'this week' — computed fresh on every
+    call, never cached, since a conversation can span days and the model
+    otherwise has no way to notice a new day (or a new hour) has started.
+    Shared by chat and voice, same reasoning as format_memory_block above."""
+    now = datetime.now().astimezone()
+    formatted = now.strftime("%A, %B %d, %Y, %H:%M %Z")
+    return (
+        f"\n\nCurrent date and time: {formatted}. Treat this as the actual "
+        "current date and time — never assume a date from training data or "
+        "from when an earlier message in this conversation was sent, "
+        "especially if the conversation spans more than one day or the "
+        "user has been away for a while."
+    )
+
+
 def format_time_block(time_label: str, time_episodes: list[dict]) -> str:
     """Render date-window episodes for the system prompt."""
     if not time_episodes:

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.sqlite import get_db
 from models.schemas import Conversation, Message
 from services.memory_service import store_memory
-from services.recall_service import recall, format_memory_block, format_time_block
+from services.recall_service import recall, format_memory_block, format_time_block, format_current_datetime_block
 from services.fact_service import extract_and_store_facts, build_profile_context
 from services.project_service import get_or_create_default_project
 from services.role_service import resolve_role
@@ -146,7 +146,7 @@ async def voice_command(
     context_block = ("\n\n" + "\n".join(context_lines)) if context_lines else ""
 
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT + _TOOL_NOTE + context_block + memory_context},
+        {"role": "system", "content": _SYSTEM_PROMPT + _TOOL_NOTE + context_block + memory_context + format_current_datetime_block()},
         {"role": "user", "content": req.transcript},
     ]
 

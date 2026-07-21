@@ -8,7 +8,7 @@ from models.schemas import (
 )
 from database.sqlite import get_db, AsyncSessionLocal
 from services.memory_service import store_memory, bump_recall_counts
-from services.recall_service import recall, format_memory_block, format_time_block
+from services.recall_service import recall, format_memory_block, format_time_block, format_current_datetime_block
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
     store_fact, get_pinned_facts, get_episodes_by_ids,
@@ -326,7 +326,7 @@ async def send_message(
             {"type": "text", "text": user_turn},
         ]
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + tool_instruction + memory_context}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + tool_instruction + memory_context + format_current_datetime_block()}]
     for msg in history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
