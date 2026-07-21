@@ -454,7 +454,11 @@ def _parse_args(raw) -> dict:
 def _build_assistant_tool_msg(reply: str, tool_calls: list[dict], is_anthropic: bool) -> dict:
     if is_anthropic:
         blocks = []
-        if reply:
+        # Claude sometimes emits a whitespace-only filler string (a lone
+        # space or newline) right before a tool_use block — truthy in
+        # Python, but Anthropic's API rejects a text block that's not
+        # actually non-whitespace text, so a plain `if reply:` isn't enough.
+        if reply and reply.strip():
             blocks.append({"type": "text", "text": reply})
         for tc in tool_calls:
             fn = tc.get("function", {})
