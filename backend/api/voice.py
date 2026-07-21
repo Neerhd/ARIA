@@ -155,6 +155,11 @@ async def voice_command(
         provider, model, messages, ALL_TOOLS, None, role="agentic"
     )
 
+    # A blank/whitespace-only reply must never be stored (or pasted) verbatim
+    # — see chat.py's matching guard for why.
+    if not reply.strip():
+        reply = "[No response generated]"
+
     # Persist like a chat turn so voice commands are browsable and remembered.
     episode_id = str(uuid.uuid4())
     stored_prompt = f"[voice · {req.active_app_name or 'unknown app'}] {req.transcript}"

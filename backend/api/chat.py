@@ -328,6 +328,15 @@ async def send_message(
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT + tool_instruction + memory_context + format_current_datetime_block()}]
     for msg in history:
+        # A blank/whitespace-only stored message (a handful exist from
+        # before persisted replies were guarded against this — see below)
+        # would otherwise get replayed into every future request in this
+        # conversation forever, and Anthropic rejects an empty content
+        # block outright — so a single bad row would permanently break the
+        # conversation. Skipping it here means that can never happen again,
+        # regardless of how such a row came to exist.
+        if not (msg.content or "").strip():
+            continue
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": user_turn})
 
@@ -398,6 +407,11 @@ async def send_message(
             return
 
         # ── Persist to SQLite ───────────────────────────────────────────────
+        # A blank/whitespace-only reply must never be stored verbatim — see
+        # the history-skip comment above for why (it would permanently
+        # break every future message in this conversation).
+        if not reply.strip():
+            reply = "[No response generated]"
         user_msg = Message(
             id=str(uuid.uuid4()), conversation_id=convo.id, role="user", content=stored_user_content,
         )
