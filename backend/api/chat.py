@@ -6,7 +6,7 @@ from models.schemas import (
     ChatRequest, ConversationOut, ConversationUpdate, MessageOut,
     Conversation, Message, RoutingLog, Project,
 )
-from database.sqlite import get_db
+from database.sqlite import get_db, AsyncSessionLocal
 from services.memory_service import store_memory, bump_recall_counts
 from services.recall_service import recall, format_memory_block, format_time_block
 from services.graph_service import (
@@ -88,6 +88,37 @@ async def _store_episode_memory(episode_id, conversation_id, prompt, response, p
     logger.info(f"Episode {episode_id[:8]} topics: {topics}")
     if topics:
         await store_concepts(episode_id, topics)
+
+
+async def _persist_stopped_reply(
+    episode_id, conversation_id, project_id, stored_user_content, reply,
+    routing_mode, role, provider, model, user_text, new_fact_text,
+):
+    """Stop-button persistence — same shape as a completed turn, just with
+    whatever text streamed before the client disconnected. Runs on its own
+    DB session rather than the request's: this is fired from inside a
+    cancelled request's cancel scope, and by the time this task actually
+    runs the request-scoped session may already be torn down."""
+    if not reply.strip():
+        return  # nothing streamed yet — nothing worth saving
+    async with AsyncSessionLocal() as session:
+        session.add(Message(id=str(uuid.uuid4()), conversation_id=conversation_id, role="user", content=stored_user_content))
+        session.add(Message(id=episode_id, conversation_id=conversation_id, role="assistant", content=reply))
+        session.add(RoutingLog(
+            id=str(uuid.uuid4()), message_id=episode_id, conversation_id=conversation_id,
+            routing_mode=routing_mode, role=role or "", model_used=f"{provider}:{model}",
+            signals=json.dumps([]),
+        ))
+        await session.commit()
+
+    store_memory(
+        f"User: {stored_user_content}\nARIA: {reply}",
+        {"conversation_id": conversation_id, "project_id": project_id, "type": "exchange"},
+        entry_id=episode_id,
+    )
+    await _store_episode_memory(episode_id, conversation_id, stored_user_content, reply, project_id)
+    if not new_fact_text:
+        await extract_and_store_facts(user_text, reply)
 
 
 # ─── Chat endpoint ─────────────────────────────────────────────────────────────
@@ -345,6 +376,19 @@ async def send_message(
                 elif event["type"] == "done":
                     reply = event["reply"]
                     tools_used = event["tools_used"]
+        except asyncio.CancelledError:
+            # Client disconnected — the Stop button. Persist whatever
+            # streamed so far exactly like a completed turn, just shorter,
+            # so reopening the conversation shows it instead of nothing.
+            # Fired via create_task rather than awaited: this frame is
+            # inside a cancelled scope, so any further await here would
+            # just be cancelled again immediately (same reasoning as the
+            # reply-dependent background jobs below).
+            asyncio.create_task(_persist_stopped_reply(
+                episode_id, convo.id, convo.project_id, stored_user_content, reply,
+                routing_mode, role, provider, model, user_text, new_fact_text,
+            ))
+            raise
         except HTTPException as e:
             yield emit({"type": "error", "detail": e.detail})
             return

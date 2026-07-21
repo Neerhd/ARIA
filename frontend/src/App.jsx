@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import MessageList from "./components/MessageList";
 import InputBar from "./components/input-bar/InputBar";
@@ -20,7 +20,13 @@ export default function App() {
   const [view, setView] = useState("chat"); // "chat" | "graph"
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
+  // loading: true only until the "meta" event names the assistant message —
+  // drives MessageList's floating "ARIA is thinking…" bubble, which then
+  // hands off to the real (growing) bubble's own inline thinking state.
+  // generating: true for the whole request, meta through done/error/abort —
+  // drives the composer's disabled state and the Send/Stop button swap.
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -30,6 +36,11 @@ export default function App() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const [memoryJumpTo, setMemoryJumpTo] = useState(null);
+
+  // The in-flight streamed request's abort handle — set at the start of
+  // _doSend, cleared once it settles. Lets the Stop button cancel whichever
+  // request is currently running.
+  const abortControllerRef = useRef(null);
 
   // New-chat greeting — cycles through the full pool before repeating.
   const [nextGreeting] = useState(() => createGreetingCycle());
@@ -215,12 +226,16 @@ export default function App() {
     };
     setMessages((prev) => [...prev, optimistic]);
     setLoading(true);
+    setGenerating(true);
     setError(null);
 
     // Set once the "meta" event names the real assistant message id — until
     // then there's no placeholder bubble to remove on failure.
     let assistantId = null;
     let streamedText = "";
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       // A one-shot pick (retry menu) forces manual for that single message;
@@ -270,14 +285,29 @@ export default function App() {
               prev.map((m) => (m.id === assistantId ? { ...m, tools_used: event.tools_used || [], streaming: false } : m))
             );
           }
-        }
+        },
+        controller.signal
       );
     } catch (err) {
-      setError(err.message);
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId && m.id !== assistantId));
+      if (err.name === "AbortError") {
+        // User hit Stop — keep whatever text already streamed in, no error
+        // banner. The backend persists the same partial text independently
+        // (see _persist_stopped_reply in chat.py) so reopening the
+        // conversation later shows it too.
+        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)));
+      } else {
+        setError(err.message);
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId && m.id !== assistantId));
+      }
     } finally {
       setLoading(false);
+      setGenerating(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleStopGenerating = () => {
+    abortControllerRef.current?.abort();
   };
 
   const handleSend = async (text, file) => {
@@ -306,7 +336,7 @@ export default function App() {
   // pick (from RetryModelMenu, assistant replies only) forces that one
   // resend — it's not sticky, the next message routes fresh as normal.
   const handleRetryMessage = (message, sel) => {
-    if (loading) return;
+    if (generating) return;
     const userText =
       message.role === "user"
         ? message.content
@@ -491,7 +521,8 @@ export default function App() {
                   )}
                   <InputBar
                     onSend={handleSend}
-                    disabled={loading}
+                    disabled={generating}
+                    onStop={handleStopGenerating}
                     onError={setError}
                     routingMode={routingMode}
                     manualModel={manualModel}
@@ -522,7 +553,8 @@ export default function App() {
                 <div className="mx-auto w-full max-w-3xl">
                   <InputBar
                     onSend={handleSend}
-                    disabled={loading}
+                    disabled={generating}
+                    onStop={handleStopGenerating}
                     onError={setError}
                     routingMode={routingMode}
                     manualModel={manualModel}

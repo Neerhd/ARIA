@@ -55,6 +55,7 @@ export async function sendMessage(
   projectId = null,
   image = null, // { data, mime } — base64, from an uploadFile() is_image response
   onEvent = () => {},
+  signal = null, // AbortSignal — abort() rejects with a DOMException named "AbortError"
 ) {
   const body = { message, conversation_id: conversationId };
   if (fileContent) { body.file_content = fileContent; body.file_name = fileName; }
@@ -74,6 +75,7 @@ export async function sendMessage(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

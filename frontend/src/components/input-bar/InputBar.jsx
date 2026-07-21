@@ -20,7 +20,7 @@ const MIME_TO_EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif
  * docked); this component only owns the field and its row of controls.
  * Pill-shaped while single-line, relaxing to rounded-input once it grows.
  */
-export default function InputBar({ onSend, disabled, onError, routingMode, manualModel, onManualModelChange, modelOptions = [], isFollowUp = false, prefillText, prefillKey }) {
+export default function InputBar({ onSend, disabled, onStop, onError, routingMode, manualModel, onManualModelChange, modelOptions = [], isFollowUp = false, prefillText, prefillKey }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
   // Composer dictation (mic button) — separate from the system-wide voice
@@ -357,14 +357,27 @@ export default function InputBar({ onSend, disabled, onError, routingMode, manua
           />
         </Tooltip>
 
-        <Button
-          type="submit"
-          variant="primary"
-          icon={ArrowRight}
-          disabled={!canSend}
-          aria-label="Send message"
-          className="rounded-full"
-        />
+        {disabled && onStop ? (
+          <Tooltip label="Stop generating" side="top">
+            <Button
+              type="button"
+              variant="primary"
+              icon={Square}
+              onClick={onStop}
+              aria-label="Stop generating"
+              className="rounded-full"
+            />
+          </Tooltip>
+        ) : (
+          <Button
+            type="submit"
+            variant="primary"
+            icon={ArrowRight}
+            disabled={!canSend}
+            aria-label="Send message"
+            className="rounded-full"
+          />
+        )}
       </form>
     </div>
   );
