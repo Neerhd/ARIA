@@ -17,7 +17,7 @@ export default function EpisodeCard({ episode }) {
           </div>
           <div className="flex shrink-0 items-center gap-2.5">
             {episode.recall_count > 0 && (
-              <span title="Times recalled" className="font-mono text-[11px] text-green-500 tabular-nums">
+              <span title="Times recalled" className="font-mono text-[11px] text-stat-positive tabular-nums">
                 ↑{episode.recall_count}
               </span>
             )}

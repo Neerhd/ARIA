@@ -219,7 +219,7 @@ export default function InputBar({ onSend, disabled, onStop, onError, routingMod
                 className="size-4 shrink-0 rounded-sm object-cover"
               />
             ) : (
-              <Paperclip className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <Paperclip className="size-[14px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
             )}
             <span className="max-w-[200px] truncate">{file.name}</span>
             <button
@@ -228,7 +228,7 @@ export default function InputBar({ onSend, disabled, onStop, onError, routingMod
               aria-label="Remove attachment"
               className="flex shrink-0 cursor-pointer items-center justify-center outline-none"
             >
-              <X className="size-3" strokeWidth={1.75} aria-hidden="true" />
+              <X className="size-[12px]" strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -351,7 +351,7 @@ export default function InputBar({ onSend, disabled, onStop, onError, routingMod
             aria-label={micState === "recording" ? "Stop dictation" : "Start dictation"}
             className={cn(
               "rounded-full",
-              micState === "recording" && "animate-pulse text-red-600 dark:text-red-400",
+              micState === "recording" && "animate-pulse text-destructive",
               micState === "transcribing" && "[&_svg]:animate-spin"
             )}
           />

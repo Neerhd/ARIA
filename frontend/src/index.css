@@ -146,6 +146,8 @@ body {
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-stat-positive: var(--stat-positive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -232,6 +234,14 @@ body {
   --tooltip-border: oklch(0.371 0 0); /* neutral-700 */
   --tooltip-foreground: oklch(1 0 0); /* white */
   --tooltip-muted-foreground: oklch(0.708 0 0); /* neutral-400 */
+
+  /* Warning (truncated-file notice) and stat-positive (memory recall-count
+     boost) — fixed regardless of app theme, same reasoning as Tooltip above.
+     Reference Tailwind's own palette vars directly rather than duplicating
+     an oklch value, so these stay pixel-identical to the amber-400/green-500
+     utilities they replace. */
+  --warning: var(--color-amber-400);
+  --stat-positive: var(--color-green-500);
 
   --button-radius: 6px;
 

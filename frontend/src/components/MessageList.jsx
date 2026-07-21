@@ -106,7 +106,7 @@ export default function MessageList({ messages, loading, onJumpToMemory, onRetry
                 {m.file_name && (
                   <div className="mb-1.5 inline-flex items-center gap-1.5 rounded bg-primary-foreground/10 px-2 py-0.5 text-xs">
                     <Paperclip className="size-3" /> {m.file_name}
-                    {m.truncated && <span className="text-amber-400"> (truncated)</span>}
+                    {m.truncated && <span className="text-warning"> (truncated)</span>}
                   </div>
                 )}
                 {isUser ? (
@@ -122,11 +122,13 @@ export default function MessageList({ messages, loading, onJumpToMemory, onRetry
           })}
 
           {loading && (
-            <div className="flex justify-start">
-              <div className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
-                <span>ARIA is thinking…</span>
-              </div>
-            </div>
+            // Same markup as the real assistant bubble's own empty-streaming
+            // state below (m.streaming && !m.content) — this one is only on
+            // screen for the pre-"meta" gap, before that bubble exists yet.
+            // Matching it exactly means no visual jump at the handoff.
+            <Bubble role="assistant">
+              <span className="text-muted-foreground">ARIA is thinking…</span>
+            </Bubble>
           )}
           <div ref={bottomRef} />
         </div>
