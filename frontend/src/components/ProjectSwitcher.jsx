@@ -25,9 +25,14 @@ export default function ProjectSwitcher({ open, onOpenChange, projects, activePr
     setCreating(true);
     setError(null);
     try {
-      await createProject(name);
+      const created = await createProject(name);
       setNewName("");
       await onProjectsChange();
+      // Creating a project should switch into it — otherwise you're left in
+      // whichever project was active before, and anything you send next
+      // silently lands there instead of the one you just made.
+      onSelect(created.id);
+      onOpenChange(false);
     } catch (err) {
       setError(err.message);
     } finally {
