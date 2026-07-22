@@ -154,13 +154,20 @@ async def send_message(
             project_id = await _resolve_project_id(db, req.project_id)
             convo = Conversation(id=req.conversation_id, title=title, project_id=project_id)
             db.add(convo)
-            await db.flush()
+            # Committed immediately, not just flushed — the sidebar's own
+            # GET /chat/conversations request (fired the moment the "meta"
+            # event below hands the frontend a conversation_id, well before
+            # the model reply finishes) runs on a separate DB connection
+            # that can't see a flushed-but-uncommitted row. A new chat
+            # would stay invisible in the sidebar for the entire duration
+            # of the reply otherwise.
+            await db.commit()
     else:
         title = req.file_name or user_text[:60]
         project_id = await _resolve_project_id(db, req.project_id)
         convo = Conversation(id=str(uuid.uuid4()), title=title, project_id=project_id)
         db.add(convo)
-        await db.flush()
+        await db.commit()  # see comment above
 
     # ── Load recent conversation history ───────────────────────────────────────
     history_result = await db.execute(
