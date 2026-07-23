@@ -18,7 +18,14 @@ export function useMemoryBrowser(open, projectId) {
   const [runResult, setRunResult] = useState(null);
 
   const loadAll = useCallback(() => {
-    if (!projectId) return;
+    // No project id yet (e.g. the projects list hasn't finished its own
+    // initial fetch) — resolve loading to false rather than leaving it
+    // stuck forever; the effect below re-runs and fetches for real the
+    // moment a real projectId arrives.
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       fetchMemoryEpisodes(projectId, 30),

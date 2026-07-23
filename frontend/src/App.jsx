@@ -147,6 +147,14 @@ export default function App() {
     refreshRouterConfig();
   }, []);
 
+  // Memory/Graph need a real project id — the backend's memory endpoints
+  // require one outright, and /graph 422s without one in project scope.
+  // activeProjectId is null for the common "unfiled" case (matches Default
+  // on the backend, see _resolve_project_id in chat.py), so resolve to the
+  // real Default project's id rather than passing null straight through.
+  const defaultProjectId = projects.find((p) => p.name === "Default")?.id ?? null;
+  const memoryGraphProjectId = activeProjectId || defaultProjectId;
+
   // Every selectable model across configured providers.
   const modelOptions = routerConfig
     ? Object.entries(routerConfig.providers)
@@ -503,7 +511,7 @@ export default function App() {
                 Loading 3D graph…
               </div>
             }>
-              <GraphView active={view === "graph"} projectId={activeProjectId} onJumpToMemory={handleJumpToMemory} />
+              <GraphView active={view === "graph"} projectId={memoryGraphProjectId} onJumpToMemory={handleJumpToMemory} />
             </Suspense>
           ) : messages.length === 0 && !loading ? (
             <div className="flex flex-1 flex-col px-6 py-8 md:justify-center">
@@ -574,7 +582,7 @@ export default function App() {
       <MemoryBrowser
         open={memoryOpen}
         onOpenChange={setMemoryOpen}
-        projectId={activeProjectId}
+        projectId={memoryGraphProjectId}
         jumpTo={memoryJumpTo}
       />
       <RouterSettings
