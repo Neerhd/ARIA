@@ -79,7 +79,21 @@ function getNeighborIds(links, nodeId) {
 function ForceGraph({ graphData, focusedId, onNodeClick, onNodeHover }) {
   const fgRef = useRef();
 
-  useFrame(() => fgRef.current?.tickFrame());
+  useFrame(() => {
+    // three-forcegraph rebuilds its internal d3 simulation whenever
+    // graphData changes (e.g. expanding a concept on click) — for one
+    // frame right after that, its simulation reference can be transiently
+    // undefined while useFrame keeps calling tickFrame() every frame,
+    // uncoordinated with that rebuild. Uncaught, that throws inside the
+    // R3F render loop and freezes the whole 3D view — the click visibly
+    // "does nothing" even though the state update underneath it worked.
+    // Skipping the one bad frame costs nothing (60 of these run a second).
+    try {
+      fgRef.current?.tickFrame();
+    } catch {
+      // transient — the next frame's tickFrame() call succeeds normally.
+    }
+  });
 
   useEffect(() => {
     if (!fgRef.current) return;
