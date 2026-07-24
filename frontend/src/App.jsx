@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "./components/sidebar/Sidebar";
 import MessageList from "./components/MessageList";
 import InputBar from "./components/input-bar/InputBar";
@@ -10,14 +10,11 @@ import Button from "./components/button/Button";
 import Tooltip from "./components/tooltip/Tooltip";
 import Avatar from "./components/avatar/Avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Moon, Sun, Brain, Settings, FolderKanban, Share2, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
+import { Moon, Sun, Brain, Settings, FolderKanban, Plus, SquarePen, Search, Pin, PinOff, MoreHorizontal } from "lucide-react";
 import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversations, setConversationPinned, fetchRouterConfig } from "./services/api";
 import { createGreetingCycle } from "./lib/greetings";
 
-const GraphView = lazy(() => import("./components/GraphView"));
-
 export default function App() {
-  const [view, setView] = useState("chat"); // "chat" | "graph"
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   // loading: true only until the "meta" event names the assistant message —
@@ -35,8 +32,6 @@ export default function App() {
     if (stored !== null) return stored === "true";
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
-  const [memoryJumpTo, setMemoryJumpTo] = useState(null);
-
   // The in-flight streamed request's abort handle — set at the start of
   // _doSend, cleared once it settles. Lets the Stop button cancel whichever
   // request is currently running.
@@ -45,12 +40,6 @@ export default function App() {
   // New-chat greeting — cycles through the full pool before repeating.
   const [nextGreeting] = useState(() => createGreetingCycle());
   const [greeting, setGreeting] = useState(() => nextGreeting());
-
-  const handleJumpToMemory = (type, ref) => {
-    setMemoryJumpTo({ type, ref });
-    setSettingsOpen(false);
-    setMemoryOpen(true);
-  };
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -91,7 +80,6 @@ export default function App() {
   // silently change which project new chats get filed into. Only explicit
   // choices (ProjectSwitcher, a project's own "+ new chat" button) do that.
   const handleSelectChat = (convo) => {
-    setView("chat");
     loadConversation(convo.id);
   };
 
@@ -126,7 +114,6 @@ export default function App() {
 
   const handleNewChatInProject = (projectId) => {
     setActiveProjectId(projectId);
-    setView("chat");
     handleNewChat();
   };
 
@@ -147,13 +134,13 @@ export default function App() {
     refreshRouterConfig();
   }, []);
 
-  // Memory/Graph need a real project id — the backend's memory endpoints
-  // require one outright, and /graph 422s without one in project scope.
-  // activeProjectId is null for the common "unfiled" case (matches Default
-  // on the backend, see _resolve_project_id in chat.py), so resolve to the
-  // real Default project's id rather than passing null straight through.
+  // Memory Browser needs a real project id — its backend endpoints require
+  // one outright. activeProjectId is null for the common "unfiled" case
+  // (matches Default on the backend, see _resolve_project_id in chat.py),
+  // so resolve to the real Default project's id rather than passing null
+  // straight through.
   const defaultProjectId = projects.find((p) => p.name === "Default")?.id ?? null;
-  const memoryGraphProjectId = activeProjectId || defaultProjectId;
+  const memoryProjectId = activeProjectId || defaultProjectId;
 
   // Every selectable model across configured providers.
   const modelOptions = routerConfig
@@ -186,7 +173,6 @@ export default function App() {
   const handleModeChange = (mode) => setRoutingMode(mode);
 
   const loadConversation = async (id) => {
-    setView("chat");
     setConversationId(id);
     setError(null);
     try {
@@ -357,9 +343,12 @@ export default function App() {
   };
 
   // Drops a sent message's text back into the composer for editing — see
-  // InputBar's prefillKey effect.
+  // InputBar's prefillKey effect. Also reused by the provenance view's
+  // "this seems outdated" action (SourcesProvenance) — same mechanism,
+  // different origin.
   const [editDraft, setEditDraft] = useState(null);
   const handleEditMessage = (message) => setEditDraft({ text: message.content, key: Date.now() });
+  const handleComposeCorrection = (draft) => setEditDraft({ text: draft, key: Date.now() });
 
   // The "More" menu (Edit / Delete) is deferred entirely — no dropdown
   // built yet, just the icon.
@@ -420,23 +409,18 @@ export default function App() {
 
   const sidebarLogo = <Avatar variant="content" src="/aria-logo.png" alt="ARIA" size="m" shape="rounded" />;
 
-  // Global shortcuts for New Chat/Graph/Memory — Search stays visual-only
-  // until it's actually implemented. Surfaced only via the collapsed
-  // sidebar's tooltips, not as permanent inline text. Note: ⌘N/⌘M may be
-  // intercepted by the OS/browser before reaching page JS on some platforms
-  // (Mac reserves Cmd+N for a new browser window, Cmd+M to minimize).
+  // Global shortcuts for New Chat/Memory — Search stays visual-only until
+  // it's actually implemented. Surfaced only via the collapsed sidebar's
+  // tooltips, not as permanent inline text. Note: ⌘N/⌘M may be intercepted
+  // by the OS/browser before reaching page JS on some platforms (Mac
+  // reserves Cmd+N for a new browser window, Cmd+M to minimize).
   useEffect(() => {
     const handler = (e) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       switch (e.key.toLowerCase()) {
         case "n":
           e.preventDefault();
-          setView("chat");
           handleNewChatUnfiled();
-          break;
-        case "g":
-          e.preventDefault();
-          setView((v) => (v === "graph" ? "chat" : "graph"));
           break;
         case "m":
           e.preventDefault();
@@ -452,18 +436,10 @@ export default function App() {
   }, []);
 
   // Search doesn't exist yet — the item is a placeholder for future
-  // functionality. Graph/Memory moved here from the app header.
+  // functionality. Memory moved here from the app header.
   const sidebarNavItems = [
-    { id: "new-chat", label: "New Chat", icon: SquarePen, shortcut: "⌘N", onClick: () => { setView("chat"); handleNewChatUnfiled(); } },
+    { id: "new-chat", label: "New Chat", icon: SquarePen, shortcut: "⌘N", onClick: () => handleNewChatUnfiled() },
     { id: "search", label: "Search Chats", icon: Search, shortcut: "⌘K", onClick: () => {} },
-    {
-      id: "graph",
-      label: "Graph",
-      icon: Share2,
-      shortcut: "⌘G",
-      active: view === "graph",
-      onClick: () => setView((v) => (v === "graph" ? "chat" : "graph")),
-    },
     {
       id: "memory",
       label: "Memory",
@@ -505,15 +481,7 @@ export default function App() {
         </header>
 
         <main className="flex flex-1 flex-col overflow-hidden bg-sidebar">
-          {view === "graph" ? (
-            <Suspense fallback={
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Loading 3D graph…
-              </div>
-            }>
-              <GraphView active={view === "graph"} projectId={memoryGraphProjectId} onJumpToMemory={handleJumpToMemory} />
-            </Suspense>
-          ) : messages.length === 0 && !loading ? (
+          {messages.length === 0 && !loading ? (
             <div className="flex flex-1 flex-col px-6 py-8 md:justify-center">
               <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 md:flex-none md:-translate-y-10">
                 <div className="flex flex-1 -translate-y-6 flex-col items-center justify-center md:flex-none md:translate-y-0">
@@ -545,9 +513,9 @@ export default function App() {
               <MessageList
                 messages={messages}
                 loading={loading}
-                onJumpToMemory={handleJumpToMemory}
                 onRetryMessage={handleRetryMessage}
                 onEditMessage={handleEditMessage}
+                onComposeCorrection={handleComposeCorrection}
                 modelOptions={modelOptions}
               />
               {error && (
@@ -582,8 +550,7 @@ export default function App() {
       <MemoryBrowser
         open={memoryOpen}
         onOpenChange={setMemoryOpen}
-        projectId={memoryGraphProjectId}
-        jumpTo={memoryJumpTo}
+        projectId={memoryProjectId}
       />
       <RouterSettings
         open={settingsOpen}
