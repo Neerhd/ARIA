@@ -11,7 +11,7 @@ from services.memory_service import store_memory, bump_recall_counts
 from services.recall_service import recall, format_memory_block, format_time_block, format_current_datetime_block
 from services.graph_service import (
     store_episode, store_concepts, link_to_previous, reinforce,
-    store_fact, get_pinned_facts, get_episodes_by_ids,
+    store_fact, get_active_facts, get_episodes_by_ids, get_reflection_source_episode_ids,
 )
 from services.project_service import get_or_create_default_project
 from services.topic_service import extract_topics
@@ -45,6 +45,10 @@ SYSTEM_PROMPT = (
     "world knowledge is unaffected by this rule."
 )
 
+# Cap on relevance-matched auto-captured fact citations per reply — see the
+# comment at its use site in send_message.
+_MAX_AUTO_FACT_SOURCES = 6
+
 # Matches phrases like "remember this", "save that", "don't forget", etc.
 _REMEMBER_RE = re.compile(
     r"^\s*"
@@ -65,6 +69,21 @@ def _extract_fact(text: str) -> str | None:
         return None
     fact = text[m.end():].strip(" .,:;—-–\n")
     return fact if len(fact) >= 3 else None
+
+
+def _fact_is_relevant(fact: dict, context_text: str) -> bool:
+    """The living profile (build_profile_context) always injects every
+    active fact regardless of relevance — that's fine as ambient context,
+    but citing all of them as this reply's "sources" would be dishonest
+    (most were never actually drawn on) and, in practice, unusable (100+
+    facts accumulate fast). A fact only earns a citation here if its
+    subject is actually mentioned in this turn's message or in the memory
+    already recalled for it."""
+    subject = (fact.get("subject") or "").lower()
+    if not subject:
+        return False
+    words = [w for w in subject.split() if len(w) >= 3]
+    return any(w in context_text for w in words) if words else subject in context_text
 
 
 async def _resolve_project_id(db: AsyncSession, project_id: str | None) -> str:
@@ -255,12 +274,19 @@ async def send_message(
     # ── Inject the living profile (Layer 4 — replaces the pinned-facts dump) ──
     profile_context = await build_profile_context()
     memory_context = profile_context + memory_context
-    pinned_facts = await get_pinned_facts()  # provenance citations only
+    # Active, not just pinned — an auto-captured fact (e.g. "you live in
+    # Rotterdam") can shape a reply just as much as a "remember this" one,
+    # and it's exactly the kind of thing that goes stale and needs the
+    # tier-3 "this is wrong, fix it" correction flow.
+    active_facts = await get_active_facts()
 
     # ── Build lean provenance for this reply (M14) — surfaces what was already
     # retrieved above, no new retrieval, no full prompt/response text ─────────
     sources: list[dict] = []
+    episode_topics: dict[str, set] = {}
     # Date-window episodes are exact records — cite them like recalled ones.
+    # (No topics fetched for these — a rarer citation path, not worth a
+    # second query variant just to feed the relationship lines below.)
     for e in recall_result["time_episodes"]:
         prompt = e.get("prompt") or ""
         sources.append({
@@ -277,6 +303,7 @@ async def send_message(
         episode_ids = {e["id"] for e in episodes}
         for e in episodes:
             prompt = e.get("prompt") or ""
+            episode_topics[e["id"]] = set(e.get("topics") or [])
             sources.append({
                 "type": "episode",
                 "ref_id": e["id"],
@@ -295,7 +322,30 @@ async def send_message(
                     "label": text[:80] + ("…" if len(text) > 80 else ""),
                     "timestamp": meta.get("timestamp"),
                 })
-    for f in pinned_facts:
+    # Relevance context for the fact filter below — the user's message plus
+    # whatever memory text was actually recalled for it, so a vague
+    # follow-up ("what should I do?") still matches facts behind the
+    # conversation it's implicitly continuing, not just facts whose exact
+    # words appear in this one short message.
+    fact_context = user_text.lower() + " " + " ".join(
+        (e.get("prompt") or "") for e in recall_result["time_episodes"]
+    ).lower()
+    if recalled_ids:
+        fact_context += " " + " ".join((e.get("prompt") or "") for e in episodes).lower()
+        fact_context += " " + " ".join((m.get("text") or "") for m in memories).lower()
+
+    # Pinned facts are always kept (few, and explicitly user-chosen); relevant
+    # auto-captured ones are capped and recency-sorted — a broad question can
+    # still legitimately match dozens of facts once enough history piles up,
+    # and a provenance timeline with 60 overlapping dots is unreadable, not
+    # more honest. _MAX_AUTO_FACT_SOURCES keeps the view actually usable.
+    relevant_auto_facts = sorted(
+        (f for f in active_facts if not f.get("user_pinned") and _fact_is_relevant(f, fact_context)),
+        key=lambda f: f.get("created_at") or "",
+        reverse=True,
+    )[:_MAX_AUTO_FACT_SOURCES]
+    cited_facts = [f for f in active_facts if f.get("user_pinned")] + relevant_auto_facts
+    for f in cited_facts:
         text = f.get("text") or ""
         sources.append({
             "type": "fact",
@@ -303,6 +353,34 @@ async def send_message(
             "label": text[:80] + ("…" if len(text) > 80 else ""),
             "timestamp": f.get("created_at"),
         })
+
+    # ── Relationship lines for the provenance view — not corroboration,
+    # derivation: which cited sources aren't actually independent of each
+    # other (a reflection cited alongside the very episode it was built
+    # from, or two episodes that discuss the same concept). ───────────────
+    related: dict[str, set] = {}
+
+    def _link(a: str, b: str) -> None:
+        related.setdefault(a, set()).add(b)
+        related.setdefault(b, set()).add(a)
+
+    episode_source_ids = [s["ref_id"] for s in sources if s["type"] == "episode"]
+    for i, a_id in enumerate(episode_source_ids):
+        for b_id in episode_source_ids[i + 1:]:
+            if episode_topics.get(a_id) and episode_topics.get(a_id) & episode_topics.get(b_id, set()):
+                _link(a_id, b_id)
+
+    reflection_source_ids = [s["ref_id"] for s in sources if s["type"] == "reflection"]
+    if reflection_source_ids:
+        reflection_links = await get_reflection_source_episode_ids(reflection_source_ids)
+        cited_episode_ids = set(episode_source_ids)
+        for rid, source_episode_ids in reflection_links.items():
+            for eid in source_episode_ids:
+                if eid in cited_episode_ids:
+                    _link(rid, eid)
+
+    for s in sources:
+        s["related_to"] = sorted(related.get(s["ref_id"], ()))
 
     # ── If this is a remember request, guide ARIA to acknowledge it ───────────
     if new_fact_text:

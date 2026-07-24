@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 from services.graph_service import (
     get_recent_episodes, get_top_concepts, get_graph_stats,
-    get_pinned_facts, delete_pinned_fact,
+    delete_pinned_fact, supersede_fact,
 )
 
 router = APIRouter(prefix="/memory", tags=["memory"])
+
+
+class FactCorrection(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
 
 
 @router.get("/episodes")
@@ -37,3 +42,14 @@ async def remove_pinned(fact_id: str):
     if not ok:
         raise HTTPException(500, "Failed to delete pinned fact")
     return {"deleted": True}
+
+
+@router.put("/facts/{fact_id}")
+async def correct_fact(fact_id: str, body: FactCorrection):
+    """Provenance tier-3 "this is wrong" correction — supersedes the fact
+    with corrected text rather than editing it in place, so the old
+    (wrong) version stays in history instead of being silently overwritten."""
+    new_id = await supersede_fact(fact_id, body.text.strip())
+    if not new_id:
+        raise HTTPException(404, f"Fact {fact_id} not found")
+    return {"id": new_id, "text": body.text.strip()}

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Paperclip, MessageSquareText, Pin, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal, ChevronRight } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Paperclip, Copy, RotateCcw, Pencil, Share, Download, MoreHorizontal } from "lucide-react";
 import Bubble from "./bubble/Bubble";
 import Markdown from "./bubble/Markdown";
 import RetryModelMenu from "./bubble/RetryModelMenu";
-import Badge from "./badge/Badge";
+import SourcesProvenance from "./bubble/SourcesProvenance";
 import { useScrollThumb } from "../hooks/useScrollThumb";
 import { cn } from "@/lib/utils";
 
@@ -12,44 +12,7 @@ const formatTimestamp = (iso) => {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
-// Sources are collapsed by default — a citation list isn't something you
-// need to see on every reply, just a one-click way to check it when you do.
-function SourcesDisclosure({ sources, onJumpToMemory }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!sources || sources.length === 0) return null;
-
-  return (
-    <div className="mt-1.5">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="font-sidebar inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground outline-none hover:text-foreground"
-        aria-expanded={expanded}
-      >
-        <ChevronRight className={cn("size-3 shrink-0 transition-transform", expanded && "rotate-90")} strokeWidth={1.75} aria-hidden="true" />
-        {sources.length} source{sources.length > 1 ? "s" : ""}
-      </button>
-      {expanded && (
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          {sources.map((s) => (
-            <Badge
-              key={s.ref_id}
-              color="neutral"
-              icon={s.type === "fact" ? Pin : MessageSquareText}
-              onClick={() => onJumpToMemory(s.type, s.ref_id)}
-              title={s.label}
-              className="max-w-[160px]"
-            >
-              {s.label}
-            </Badge>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function MessageList({ messages, loading, onJumpToMemory, onRetryMessage, onEditMessage, modelOptions = [] }) {
+export default function MessageList({ messages, loading, onRetryMessage, onEditMessage, onComposeCorrection, modelOptions = [] }) {
   const bottomRef = useRef(null);
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -116,7 +79,7 @@ export default function MessageList({ messages, loading, onJumpToMemory, onRetry
                 ) : (
                   <Markdown>{m.content}</Markdown>
                 )}
-                <SourcesDisclosure sources={m.sources} onJumpToMemory={onJumpToMemory} />
+                <SourcesProvenance sources={m.sources} onComposeCorrection={onComposeCorrection} />
               </Bubble>
             );
           })}

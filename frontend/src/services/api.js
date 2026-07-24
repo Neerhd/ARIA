@@ -148,13 +148,6 @@ export async function fetchMemoryStats(projectId) {
   return requestOr(`/memory/stats?project_id=${encodeURIComponent(projectId)}`, {});
 }
 
-export async function fetchGraph(projectId, scope = "project") {
-  const qs = scope === "all"
-    ? "scope=all"
-    : `project_id=${encodeURIComponent(projectId)}&scope=project`;
-  return requestOr(`/graph?${qs}`, { nodes: [], edges: [] });
-}
-
 export async function fetchReflections(projectId, limit = 20) {
   return requestOr(`/consolidation/reflections?project_id=${encodeURIComponent(projectId)}&limit=${limit}`, []);
 }
@@ -165,6 +158,12 @@ export async function fetchPinnedFacts() {
 
 export async function deletePinnedFact(factId) {
   return request(`/memory/pinned/${factId}`, { method: "DELETE" });
+}
+
+// Provenance tier-3 "this is wrong" correction — supersedes the fact rather
+// than editing it in place, so the old version stays in history.
+export async function correctFact(factId, text) {
+  return request(`/memory/facts/${factId}`, { method: "PUT", body: { text } });
 }
 
 // ─── Consolidation ────────────────────────────────────────────────────────────

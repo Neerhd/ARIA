@@ -2,6 +2,7 @@
 from database.neo4j_client import get_neo4j_driver
 from datetime import datetime, timezone
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,10 @@ async def get_episodes_in_range(
 
 async def get_episodes_by_ids(episode_ids: list[str]) -> list[dict]:
     """Lean lookup for provenance citations (M14) — just enough to label a
-    source, never full prompt/response text.
+    source, never full prompt/response text. topics are included so the
+    provenance view can connect two cited episodes that discuss the same
+    concept (see get_reflection_source_episode_ids for the other half of
+    that relationship data).
     """
     if not episode_ids:
         return []
@@ -225,7 +229,9 @@ async def get_episodes_by_ids(episode_ids: list[str]) -> list[dict]:
             result = await s.run(
                 """
                 MATCH (e:Episode) WHERE e.id IN $ids
-                RETURN e.id AS id, e.prompt AS prompt, e.timestamp AS timestamp
+                OPTIONAL MATCH (e)-[:DISCUSSES]->(c:Concept)
+                WITH e, collect(c.name) AS topics
+                RETURN e.id AS id, e.prompt AS prompt, e.timestamp AS timestamp, topics
                 """,
                 ids=episode_ids,
             )
@@ -233,6 +239,29 @@ async def get_episodes_by_ids(episode_ids: list[str]) -> list[dict]:
     except Exception as e:
         logger.warning(f"get_episodes_by_ids failed: {e}")
         return []
+
+
+async def get_reflection_source_episode_ids(reflection_ids: list[str]) -> dict[str, list[str]]:
+    """For each given reflection id, which episode ids it was SYNTHESISED_FROM
+    — used to draw a provenance connection between a cited Reflection and any
+    of its actual source episodes that are also cited alongside it."""
+    if not reflection_ids:
+        return {}
+    try:
+        driver = await get_neo4j_driver()
+        async with driver.session() as s:
+            result = await s.run(
+                """
+                MATCH (r:Reflection) WHERE r.id IN $ids
+                OPTIONAL MATCH (r)-[:SYNTHESISED_FROM]->(e:Episode)
+                RETURN r.id AS id, collect(e.id) AS episode_ids
+                """,
+                ids=reflection_ids,
+            )
+            return {row["id"]: row["episode_ids"] for row in await result.data()}
+    except Exception as e:
+        logger.warning(f"get_reflection_source_episode_ids failed: {e}")
+        return {}
 
 
 # ─── Memory browser queries ────────────────────────────────────────────────────
@@ -568,23 +597,51 @@ async def get_active_facts() -> list[dict]:
         return []
 
 
-async def get_pinned_facts() -> list[dict]:
-    """Return all user-pinned facts ordered oldest-first."""
+async def supersede_fact(old_fact_id: str, new_text: str) -> str | None:
+    """User-initiated correction (provenance tier 3, "this is wrong") — marks
+    the old fact superseded and creates a new active one in its place,
+    carrying over category/subject/user_pinned/source so a corrected
+    pinned fact stays pinned and a corrected auto-captured fact keeps its
+    subject (future auto-extraction can still supersede it again later).
+    Returns the new fact's id, or None if old_fact_id doesn't exist."""
+    new_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
     try:
         driver = await get_neo4j_driver()
         async with driver.session() as s:
             result = await s.run(
                 """
-                MATCH (f:Fact {user_pinned: true})
-                RETURN f.id AS id, f.text AS text,
-                       f.raw_message AS raw_message, f.created_at AS created_at
-                ORDER BY f.created_at ASC
-                """
+                MATCH (old:Fact {id: $old_id})
+                SET old.status = 'superseded',
+                    old.superseded_at = $now,
+                    old.superseded_by = $new_id
+                RETURN old.category AS category, old.subject AS subject,
+                       coalesce(old.user_pinned, false) AS user_pinned,
+                       old.source AS source, old.raw_message AS raw_message
+                """,
+                old_id=old_fact_id, new_id=new_id, now=now,
             )
-            return [dict(r) for r in await result.data()]
+            record = await result.single()
+            if not record:
+                return None
+            await s.run(
+                """
+                CREATE (f:Fact {
+                    id: $id, text: $text, created_at: $now, status: 'active',
+                    category: $category, subject: $subject,
+                    user_pinned: $user_pinned, source: $source,
+                    raw_message: $raw_message
+                })
+                """,
+                id=new_id, text=new_text, now=now,
+                category=record["category"], subject=record["subject"],
+                user_pinned=record["user_pinned"], source=record["source"],
+                raw_message=record["raw_message"] or "",
+            )
+        return new_id
     except Exception as e:
-        logger.warning(f"get_pinned_facts failed: {e}")
-        return []
+        logger.warning(f"supersede_fact failed: {e}")
+        return None
 
 
 async def delete_episodes_by_project(project_id: str) -> int:
@@ -645,146 +702,3 @@ async def delete_pinned_fact(fact_id: str) -> bool:
         logger.warning(f"delete_pinned_fact failed: {e}")
         return False
 
-
-# ─── Graph visualizer (read-only) ──────────────────────────────────────────────
-
-def _truncate(text: str | None, length: int = 60) -> str:
-    text = text or ""
-    return text if len(text) <= length else text[:length].rstrip() + "…"
-
-
-async def get_graph_data(project_id: str | None, scope: str = "project") -> dict:
-    """Lean node/edge payload for the 3D graph visualizer — read-only, no full
-    prompt/response text (reference ids only, for Memory Browser drill-in).
-
-    scope="project": Episodes/Reflections filtered to project_id; connected
-    Concepts included regardless of project (Concepts are global).
-    scope="all": every Episode/Concept/Reflection across all projects.
-    """
-    try:
-        driver = await get_neo4j_driver()
-        async with driver.session() as s:
-            episode_filter = "{project_id: $project_id}" if scope == "project" else ""
-
-            ep_result = await s.run(
-                f"""
-                MATCH (e:Episode {episode_filter})
-                OPTIONAL MATCH (e)-[:DISCUSSES]->(c:Concept)
-                WITH e, collect(DISTINCT c.name) AS concept_names
-                OPTIONAL MATCH (e)-[:NEXT]->(next:Episode{"" if scope == "all" else " {project_id: $project_id}"})
-                RETURN e.id AS id, e.prompt AS prompt, e.timestamp AS timestamp,
-                       e.recall_count AS recall_count, e.conversation_id AS conversation_id,
-                       concept_names, next.id AS next_id
-                """,
-                project_id=project_id,
-            )
-            episodes = await ep_result.data()
-
-            if scope == "project":
-                refl_result = await s.run(
-                    """
-                    MATCH (r:Reflection)-[:SYNTHESISED_FROM]->(e:Episode {project_id: $project_id})
-                    WITH DISTINCT r
-                    OPTIONAL MATCH (r)-[:SYNTHESISED_FROM]->(se:Episode)
-                    OPTIONAL MATCH (r)-[:ABOUT]->(c:Concept)
-                    RETURN r.id AS id, r.text AS text, r.concept AS concept_field,
-                           r.created_at AS created_at, r.episode_count AS episode_count,
-                           collect(DISTINCT se.id) AS episode_ids, c.name AS about_concept
-                    """,
-                    project_id=project_id,
-                )
-            else:
-                refl_result = await s.run(
-                    """
-                    MATCH (r:Reflection)
-                    OPTIONAL MATCH (r)-[:SYNTHESISED_FROM]->(se:Episode)
-                    OPTIONAL MATCH (r)-[:ABOUT]->(c:Concept)
-                    RETURN r.id AS id, r.text AS text, r.concept AS concept_field,
-                           r.created_at AS created_at, r.episode_count AS episode_count,
-                           collect(DISTINCT se.id) AS episode_ids, c.name AS about_concept
-                    """
-                )
-            reflections = await refl_result.data()
-
-            concept_names = sorted({
-                name for ep in episodes for name in (ep["concept_names"] or [])
-            } | {
-                r["about_concept"] for r in reflections if r["about_concept"]
-            })
-
-            if concept_names:
-                if scope == "project":
-                    concept_result = await s.run(
-                        """
-                        MATCH (c:Concept) WHERE c.name IN $names
-                        OPTIONAL MATCH (c)<-[:DISCUSSES]-(e:Episode {project_id: $project_id})
-                        WITH c, count(e) AS project_count
-                        RETURN c.name AS name, c.episode_count AS total_count, project_count
-                        """,
-                        names=concept_names,
-                        project_id=project_id,
-                    )
-                else:
-                    concept_result = await s.run(
-                        """
-                        MATCH (c:Concept) WHERE c.name IN $names
-                        RETURN c.name AS name, c.episode_count AS total_count, null AS project_count
-                        """,
-                        names=concept_names,
-                    )
-                concepts = await concept_result.data()
-            else:
-                concepts = []
-
-        nodes = []
-        edges = []
-
-        for ep in episodes:
-            nodes.append({
-                "id": f"episode:{ep['id']}",
-                "type": "episode",
-                "label": _truncate(ep["prompt"]),
-                "metadata": {
-                    "conversation_id": ep["conversation_id"],
-                    "timestamp": ep["timestamp"],
-                    "recall_count": ep["recall_count"],
-                    "ref_id": ep["id"],
-                },
-            })
-            for name in ep["concept_names"] or []:
-                edges.append({"source": f"episode:{ep['id']}", "target": f"concept:{name}", "type": "DISCUSSES"})
-            if ep["next_id"]:
-                edges.append({"source": f"episode:{ep['id']}", "target": f"episode:{ep['next_id']}", "type": "NEXT"})
-
-        for r in reflections:
-            nodes.append({
-                "id": f"reflection:{r['id']}",
-                "type": "reflection",
-                "label": _truncate(r["text"] or r["concept_field"]),
-                "metadata": {
-                    "concept": r["concept_field"],
-                    "created_at": r["created_at"],
-                    "episode_count": r["episode_count"],
-                    "ref_id": r["id"],
-                },
-            })
-            for eid in r["episode_ids"] or []:
-                edges.append({"source": f"reflection:{r['id']}", "target": f"episode:{eid}", "type": "SYNTHESISED_FROM"})
-            if r["about_concept"]:
-                edges.append({"source": f"reflection:{r['id']}", "target": f"concept:{r['about_concept']}", "type": "ABOUT"})
-
-        for c in concepts:
-            metadata = {"episode_count": c["total_count"], "ref_id": c["name"]}
-            if c["project_count"] is not None:
-                metadata["project_episode_count"] = c["project_count"]
-            nodes.append({
-                "id": f"concept:{c['name']}",
-                "type": "concept",
-                "label": _truncate(c["name"], 40),
-                "metadata": metadata,
-            })
-
-        return {"nodes": nodes, "edges": edges}
-    except Exception as e:
-        logger.warning(f"get_graph_data failed: {e}")
-        return {"nodes": [], "edges": []}
