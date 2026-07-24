@@ -36,3 +36,7 @@ searxng/
 # macOS
 .DS_Store
 .AppleDouble
+
+# Conductor — personal, machine-local overrides (references this dev's own
+# data/paths; .conductor/settings.toml is the shared, committed config)
+.conductor/settings.local.toml
