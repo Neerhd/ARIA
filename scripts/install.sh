@@ -1,5 +1,16 @@
 #!/bin/bash
 # ARIA – One-time installation script for macOS Apple Silicon
+#
+# Run manually (bash scripts/install.sh) or automatically by Conductor via
+# .conductor/settings.toml's `scripts.setup` whenever a new workspace is
+# created. This script only installs dependencies — it never touches chat
+# history or memory. On this developer's machine, .conductor/settings.local.toml
+# (personal, gitignored) additionally runs scripts/seed-local-data.sh right
+# after this script, which copies backend/data/{sqlite,chroma} from the main
+# checkout ($CONDUCTOR_ROOT_PATH) into the new workspace so it starts with
+# real chats instead of empty databases. That step is deliberately kept out of
+# the shared settings.toml and out of this script, since it's specific to one
+# developer's own data and wouldn't make sense for another contributor's workspace.
 set -e
 
 ARIA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
