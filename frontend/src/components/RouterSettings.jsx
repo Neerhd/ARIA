@@ -6,6 +6,7 @@ import RoutingModeSection from "./settings/RoutingModeSection";
 import RoleAssignmentSection from "./settings/RoleAssignmentSection";
 import ProviderConfigSection from "./settings/ProviderConfigSection";
 import UsageSection from "./settings/UsageSection";
+import ConnectionSection from "./settings/ConnectionSection";
 
 export default function RouterSettings({
   open,
@@ -49,6 +50,7 @@ export default function RouterSettings({
           <UsageSection usage={usage} />
           <RoleAssignmentSection config={config} roles={roles} onRolesChanged={handleChanged} />
           <ProviderConfigSection config={config} onConfigChanged={handleChanged} />
+          <ConnectionSection />
         </div>
       </SheetContent>
     </Sheet>

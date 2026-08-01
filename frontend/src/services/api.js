@@ -1,4 +1,6 @@
-const BASE = "/api";
+import { resolveApiBase } from "./apiBase";
+
+const BASE = resolveApiBase();
 
 // ─── Request helpers ──────────────────────────────────────────────────────────
 // Two error styles exist across the app, both preserved:
