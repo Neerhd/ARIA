@@ -70,32 +70,49 @@ fn port_is_listening(port: u16) -> bool {
 // `brew services` — launchd was observed wedging the job ("Running: false"
 // right after a successful start). Do not "fix" this to use brew services;
 // that comment in start.sh documents a real problem that was already hit.
-fn start_neo4j(root: &Path) {
+//
+// Returns whether this call actually spawned Neo4j, mirroring
+// start_backend's Option<Child> — so main() can record it and shutdown()
+// can decide whether stopping Neo4j is this instance's responsibility.
+fn start_neo4j(root: &Path) -> bool {
     // Bolt port already open means Neo4j is already running (e.g.
-    // scripts/start.sh is active in a terminal) — skip the redundant start
-    // and its readiness sleep entirely.
+    // scripts/start.sh is active in a terminal) — attach to it instead of
+    // spawning a redundant one, and never stop it on quit.
     if port_is_listening(7687) {
-        println!("neo4j already listening on :7687 — skipping start");
-        return;
+        println!("neo4j already listening on :7687 — attaching instead of spawning");
+        return false;
     }
 
+    println!("neo4j not listening on :7687 — spawning it");
     let log = log_file(root, "neo4j-start.log");
     let err_log = log.try_clone().expect("clone neo4j log handle");
-    let result = Command::new(neo4j_bin())
+    let status = Command::new(neo4j_bin())
         .arg("start")
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(err_log))
         .status();
-    if let Err(e) = result {
-        eprintln!("failed to launch neo4j binary: {e}");
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("neo4j spawned by this app instance");
+            // start.sh's own readiness wait — Neo4j takes ~5s to accept
+            // connections after the daemonizer returns.
+            std::thread::sleep(Duration::from_secs(5));
+            true
+        }
+        Ok(s) => {
+            eprintln!("neo4j start exited with status {s}");
+            false
+        }
+        Err(e) => {
+            eprintln!("failed to launch neo4j binary: {e}");
+            false
+        }
     }
-    // start.sh's own readiness wait — Neo4j takes ~5s to accept connections
-    // after the daemonizer returns.
-    std::thread::sleep(Duration::from_secs(5));
 }
 
-// Always run, unconditionally, on quit — matches stop.sh, which stops Neo4j
-// via the same binary regardless of which process started it.
+// Stops Neo4j via the same binary stop.sh uses. Only called from
+// shutdown() when this app instance is the one that spawned Neo4j.
 fn stop_neo4j() {
     let _ = Command::new(neo4j_bin()).arg("stop").status();
 }
@@ -117,6 +134,7 @@ fn start_backend(root: &Path) -> Option<Child> {
     let log = log_file(root, "backend.log");
     let err_log = log.try_clone().expect("clone backend log handle");
 
+    println!("backend not listening on :8000 — spawning it");
     let child = Command::new(uvicorn)
         .args(["main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"])
         .current_dir(&backend_dir)
@@ -124,23 +142,26 @@ fn start_backend(root: &Path) -> Option<Child> {
         .stderr(Stdio::from(err_log))
         .spawn()
         .expect("failed to spawn backend — is backend/.venv set up? run scripts/install.sh");
+    println!("backend spawned by this app instance (pid {})", child.id());
 
     // start.sh's own readiness wait before moving on to the next service.
     std::thread::sleep(Duration::from_secs(2));
     Some(child)
 }
 
-// Owns only the child processes this instance of the app itself spawned —
-// never a backend we merely attached to — so quitting the app never kills
-// a backend owned by an independently-running scripts/start.sh.
+// Owns only the services this instance of the app itself spawned — never a
+// backend or Neo4j we merely attached to — so quitting the app never kills
+// a service owned by an independently-running scripts/start.sh.
 struct Supervisor {
     backend: Mutex<Option<Child>>,
+    neo4j_spawned: Mutex<bool>,
 }
 
 impl Supervisor {
-    // Full quit, stop all services — matches stop.sh's semantics. Neo4j is
-    // always stopped via its own binary regardless of who started it; the
-    // backend is only killed if this app instance spawned it.
+    // Full quit, stop what this instance owns — matches stop.sh's
+    // semantics but scoped to services this app actually spawned. Both
+    // Neo4j and the backend are left running if this instance only
+    // attached to an already-running one.
     fn shutdown(&self) {
         if let Some(mut child) = self.backend.lock().unwrap().take() {
             // Plain `kill` (SIGTERM), same as stop.sh's `kill "$PID"` — lets
@@ -148,7 +169,9 @@ impl Supervisor {
             let _ = Command::new("kill").arg(child.id().to_string()).status();
             let _ = child.wait();
         }
-        stop_neo4j();
+        if *self.neo4j_spawned.lock().unwrap() {
+            stop_neo4j();
+        }
     }
 }
 
@@ -157,6 +180,7 @@ fn main() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Supervisor {
             backend: Mutex::new(None),
+            neo4j_spawned: Mutex::new(false),
         })
         .setup(|app| {
             let window =
@@ -176,9 +200,11 @@ fn main() {
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let root = repo_root();
-                start_neo4j(&root);
+                let neo4j_spawned = start_neo4j(&root);
                 let backend_child = start_backend(&root);
-                *handle.state::<Supervisor>().backend.lock().unwrap() = backend_child;
+                let supervisor = handle.state::<Supervisor>();
+                *supervisor.neo4j_spawned.lock().unwrap() = neo4j_spawned;
+                *supervisor.backend.lock().unwrap() = backend_child;
             });
 
             Ok(())
