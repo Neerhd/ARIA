@@ -6,6 +6,8 @@ import MemoryBrowser from "./components/MemoryBrowser";
 import RouterSettings from "./components/RouterSettings";
 import ProjectSwitcher from "./components/ProjectSwitcher";
 import FirstRunSetup from "./components/FirstRunSetup";
+import LaunchOverlay from "./components/LaunchOverlay";
+import { useHealthGate } from "./hooks/useHealthGate";
 import Button from "./components/button/Button";
 import Tooltip from "./components/tooltip/Tooltip";
 import Avatar from "./components/avatar/Avatar";
@@ -15,6 +17,10 @@ import { sendMessage, fetchMessages, uploadFile, fetchProjects, fetchConversatio
 import { createGreetingCycle } from "./lib/greetings";
 
 export default function App() {
+  // Blocking overlay driven by /health — gated on infra fields only (see
+  // useHealthGate). The rest of the app still mounts underneath it.
+  const { health, ready } = useHealthGate();
+
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   // loading: true only until the "meta" event names the assistant message —
@@ -64,8 +70,12 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Skip until the backend is actually reachable — during a cold boot
+    // this effect fires before the supervisor's backend is up, and a
+    // failed fetch here would never be retried once ready.
+    if (!ready) return;
     refreshConversations();
-  }, [conversationId]);
+  }, [conversationId, ready]);
 
   const handleTogglePin = async (convo) => {
     try {
@@ -99,8 +109,9 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!ready) return;
     refreshProjects().catch(() => {});
-  }, []);
+  }, [ready]);
 
   useEffect(() => {
     if (activeProjectId) localStorage.setItem("aria-active-project", activeProjectId);
@@ -131,8 +142,9 @@ export default function App() {
     fetchRouterConfig().then(setRouterConfig).catch(() => {});
   };
   useEffect(() => {
+    if (!ready) return;
     refreshRouterConfig();
-  }, []);
+  }, [ready]);
 
   // Memory Browser needs a real project id — its backend endpoints require
   // one outright. activeProjectId is null for the common "unfiled" case
@@ -452,6 +464,7 @@ export default function App() {
 
   return (
     <div className="relative flex h-screen bg-background text-foreground">
+      {!ready && <LaunchOverlay health={health} />}
       <Sidebar
         logo={sidebarLogo}
         navItems={sidebarNavItems}
