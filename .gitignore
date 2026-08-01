@@ -33,6 +33,10 @@ voice/recordings/
 # never committed (third-party source, ~128MB)
 searxng/
 
+# Rust / Tauri (M16 desktop shell)
+src-tauri/target/
+src-tauri/gen/
+
 # macOS
 .DS_Store
 .AppleDouble

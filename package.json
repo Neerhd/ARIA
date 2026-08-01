@@ -1,0 +1,12 @@
+{
+  "name": "aria-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tauri shell for ARIA — see src-tauri/ and frontend/",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
