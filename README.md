@@ -14,7 +14,7 @@ Most self-hosted AI tools are just a chat interface pointed at a model. ARIA is 
 
 | Feature | Standard RAG tools | ARIA |
 |---|---|---|
-| Memory | Vector similarity search | Knowledge graph + vector search, visually explorable in 3D |
+| Memory | Vector similarity search | Knowledge graph + vector search |
 | Learning | None — resets every session | Episodic → Semantic consolidation |
 | Transparency | Black box — no way to see why it said something | Inline citations on every memory-informed reply, plus a natural-language query tool over the graph itself |
 | Organization | One flat history | Multi-project scoping — conversations and episodic memory partitioned per project, topics stay connected across them |
@@ -30,13 +30,13 @@ Most self-hosted AI tools are just a chat interface pointed at a model. ARIA is 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
 │                         React Frontend                             │
-│  Chat · Project Switcher · 3D Graph View · Memory Browser         │
+│  Chat · Project Switcher · Memory Browser                         │
 │  File Attachments · Settings · Tool Pills                         │
 └──────────────────────────────┬────────────────────────────────────┘
                                │ REST  (localhost:5173 → 8000)
 ┌──────────────────────────────▼────────────────────────────────────┐
 │                         FastAPI Backend                            │
-│  /chat · /projects · /graph · /files/upload                       │
+│  /chat · /projects · /files/upload                                │
 │  /memory/* · /consolidation/* · /router/*                         │
 │                                                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
@@ -95,17 +95,6 @@ ARIA scopes conversations and episodic memory by project. Click the **Projects**
 
 ---
 
-## 3D Knowledge Graph Visualizer
-
-Click **Graph** in the header to switch the main view into an interactive 3D force-directed graph of your memory — Episodes, Concepts, and Reflections rendered as distinct shapes (sphere / cube / octahedron), with Concept nodes acting as visual hubs that Episodes cluster around.
-
-- **Hover** a node for a lightweight tooltip (label, type, recall count).
-- **Click** a node to focus it — its immediate connections highlight, everything else dims, and an info panel appears with a **View in Memory Browser** button.
-- **Toggle** between the active project's graph and an all-projects view, useful for seeing where a Concept bridges multiple projects.
-- Above 300 nodes, the view auto-collapses to Concept-only with click-to-reveal, so it stays readable as memory grows.
-
----
-
 ## Memory Provenance
 
 Every reply that draws on memory shows a **"Based on:"** row of clickable citations under the message — the recalled past conversations or pinned facts that shaped the answer. Click one to jump straight into the Memory Browser.
@@ -129,7 +118,7 @@ This surfaces retrieval that already happens on every turn (ChromaDB semantic re
 | M9 | UI Theming | Grayscale/OKLCH design system, Geist typography, shadcn/ui primitives, dark mode | ✅ Complete |
 | M10 | Projects | Multi-project scoping for conversations and memory, project switcher, cascading delete | ✅ Complete |
 | M11 | Deferred Fixes | Concept episode-count decrement on deletion, Memory Browser project-scoping | ✅ Complete |
-| M12 | 3D Knowledge Graph Visualizer | Interactive force-directed 3D graph of Episodes/Concepts/Reflections, click-to-focus, project/all-projects toggle | ✅ Complete |
+| M12 | 3D Knowledge Graph Visualizer | Interactive force-directed 3D graph of Episodes/Concepts/Reflections, click-to-focus, project/all-projects toggle | ✅ Superseded by M14 (retired e92f76e) |
 | M13 | Chat With The Graph | Natural-language querying of the memory graph via a fourth agent tool — read-only, enforced at the Neo4j transaction level | ✅ Complete |
 | M14 | Inline Memory Provenance | "Based on:" citations on memory-informed replies, click-through to Memory Browser | ✅ Complete |
 | M15 | Multi-Provider Model Router | Five cloud providers behind one adapter layer, task-role classification, per-role model assignment, manual per-message picker, in-app API key management, cost tracking. Replaces the M5 local tiers; Ollama removed | ✅ Complete |
@@ -261,8 +250,7 @@ ARIA/
 │   │   ├── health.py           # Health check for all services
 │   │   ├── memory.py           # Memory browser endpoints (project-scoped)
 │   │   ├── router.py           # Router config and routing log endpoints
-│   │   ├── projects.py         # Project CRUD (M10)
-│   │   └── graph.py            # Read-only graph-data endpoint for the 3D visualizer (M12)
+│   │   └── projects.py         # Project CRUD (M10)
 │   ├── database/
 │   │   ├── sqlite.py           # SQLAlchemy async engine and session
 │   │   ├── neo4j_client.py     # Neo4j async driver
@@ -294,7 +282,6 @@ ARIA/
 │       ├── index.css           # M9 design tokens — OKLCH grayscale palette, radius 0, Geist fonts
 │       ├── components/
 │       │   ├── FirstRunSetup.jsx   # Welcome screen when no provider key exists yet (M15)
-│       │   ├── GraphView.jsx       # 3D force-directed graph (react-three-fiber) (M12)
 │       │   ├── ProjectSwitcher.jsx # Project list/create/rename/delete (M10)
 │       │   ├── InputBar.jsx        # Chat input, file attachment, manual-mode model picker
 │       │   ├── MemoryBrowser.jsx   # Pinned/Episodes/Concepts/Reflections panel
@@ -305,8 +292,7 @@ ARIA/
 │       │   ├── settings/           # Settings sheet sections (mode, usage, role assignments, provider keys)
 │       │   └── ui/                 # shadcn/ui primitives (Badge, Sheet, Tabs, AlertDialog, ScrollArea, Table, …)
 │       ├── hooks/
-│       │   ├── useMemoryBrowser.js # Memory Browser data fetching + tab/filter state
-│       │   └── useGraphData.js     # 3D graph data fetching (M12)
+│       │   └── useMemoryBrowser.js # Memory Browser data fetching + tab/filter state
 │       └── services/
 │           └── api.js          # All backend API calls
 ├── voice/                      # ARIA Voice — system-wide dictation + voice commands
@@ -494,12 +480,6 @@ The backend exposes a REST API documented interactively at [http://localhost:800
 | `GET` | `/projects/{id}` | Get a project |
 | `PATCH` | `/projects/{id}` | Rename or update a project's description |
 | `DELETE` | `/projects/{id}` | Delete a project — cascades to its conversations, messages, and memory (Concepts are untouched) |
-
-### Graph
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/graph` | Nodes and edges for the 3D visualizer. `?project_id=&scope=project` (default, Episodes/Reflections scoped, connected Concepts included) or `?scope=all` |
 
 ### Files
 
