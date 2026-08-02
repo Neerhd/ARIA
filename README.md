@@ -133,6 +133,7 @@ This surfaces retrieval that already happens on every turn (ChromaDB semantic re
 | M13 | Chat With The Graph | Natural-language querying of the memory graph via a fourth agent tool — read-only, enforced at the Neo4j transaction level | ✅ Complete |
 | M14 | Inline Memory Provenance | "Based on:" citations on memory-informed replies, click-through to Memory Browser | ✅ Complete |
 | M15 | Multi-Provider Model Router | Five cloud providers behind one adapter layer, task-role classification, per-role model assignment, manual per-message picker, in-app API key management, cost tracking. Replaces the M5 local tiers; Ollama removed | ✅ Complete |
+| M16 | Native macOS Desktop App | Tauri v2 shell wrapping the existing frontend, backend/Neo4j/voice/SearXNG supervised as child processes, no terminal required to run ARIA | ✅ Complete |
 
 ---
 
@@ -189,19 +190,50 @@ On first run, you need to set a Neo4j password:
 
 ### 5. Start ARIA
 
+There are two ways to run ARIA. Pick one.
+
+**Option A — desktop app (recommended)**
+
+```bash
+npm install
+npm run tauri build
+open src-tauri/target/release/bundle/macos/ARIA.app
+```
+
+This builds a real `ARIA.app` you can keep in your Dock. Launching it starts Neo4j, the backend, SearXNG, and voice as supervised child processes — no terminal window to keep open, and quitting the app (`Cmd+Q` or the Dock) stops everything it started. See [First-launch macOS permissions](#first-launch-macos-permissions) below before you use voice commands.
+
+**Option B — scripts (fallback)**
+
 ```bash
 bash scripts/start.sh
 ```
 
-Open **[http://localhost:5173](http://localhost:5173)** in your browser. On first launch ARIA shows a welcome screen: pick a provider, follow the link to create an API key, paste it in — the key is verified live before you continue. (Alternatively, set a key in `.env`, e.g. `ANTHROPIC_API_KEY=…`.)
+Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+
+---
+
+On first launch (either option) ARIA shows a welcome screen: pick a provider, follow the link to create an API key, paste it in — the key is verified live before you continue. (Alternatively, set a key in `.env`, e.g. `ANTHROPIC_API_KEY=…`.)
 
 ### Stop ARIA
 
-Press `Ctrl+C` in the terminal running `start.sh`, or in a separate terminal:
+**App:** quit normally (`Cmd+Q` or Dock → Quit) — this stops every service the app itself started.
+
+**Scripts:** press `Ctrl+C` in the terminal running `start.sh`, or in a separate terminal:
 
 ```bash
 bash scripts/stop.sh
 ```
+
+### First-launch macOS permissions
+
+The first time you launch `ARIA.app`, macOS needs to grant it two permissions for voice dictation and hotkeys (`Ctrl+H` / `Ctrl+J`):
+
+| Permission | When it's asked | What to do |
+|---|---|---|
+| **Microphone** | Prompted automatically the first time voice captures audio | Click **Allow** |
+| **Accessibility** (and **Input Monitoring**) | **Never prompted** — macOS cannot request this one programmatically for a global hotkey listener | Go to **System Settings → Privacy & Security → Accessibility** (and **Input Monitoring**), add `ARIA.app` if it isn't already listed, and enable it |
+
+Without the Accessibility grant, the voice hotkeys will silently do nothing — this isn't a bug, it's the expected state until the grant is made. If you only use the scripts path (`start.sh`), these same permissions are instead granted to your terminal app the first time voice runs.
 
 ---
 
