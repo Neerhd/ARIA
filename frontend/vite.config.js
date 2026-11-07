@@ -34,7 +34,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        // Twyn variants point this at the shared back end through API_URL.
+        target: process.env.API_URL ?? "http://localhost:8000",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
